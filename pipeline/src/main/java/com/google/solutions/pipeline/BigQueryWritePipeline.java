@@ -20,6 +20,7 @@ import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
@@ -101,6 +102,8 @@ public class BigQueryWritePipeline {
       case FILE_LOADS:
         break;
       case STORAGE_WRITE_API:
+        TableSchema schema = getEventsSchema();
+        bigQueryWriteTransform = bigQueryWriteTransform.withSchema(schema);
         break;
       case STREAMING_INSERTS:
         bigQueryWriteTransform = bigQueryWriteTransform
@@ -140,8 +143,6 @@ public class BigQueryWritePipeline {
         throw new IllegalStateException("Unhandled method " + method);
     }
 
-    TableSchema schema = buildEventFindingsSchema();
-
 //    outputs.userEventFindings.apply("Persist User Event Findings",
 //        new PTransform<>() {
 //          @Override
@@ -160,7 +161,11 @@ public class BigQueryWritePipeline {
 //          }
 //        });
 
-    return pipeline.run();
+    PipelineResult run = pipeline.run();
+    if (options.getRunner().getName().equalsIgnoreCase("directrunner")) {
+      run.waitUntilFinish();
+    }
+    return run;
   }
 
   private static Method getPersistenceMethod(BigQueryWritePipelineOptions options) {
@@ -175,28 +180,48 @@ public class BigQueryWritePipeline {
         .valueOf(options.getPersistenceMethod());
   }
 
-  static TableSchema buildEventFindingsSchema() {
-    final TableSchema tableSchema =
-        new TableSchema()
-            .set("request_ts", new TableFieldSchema()
+  static TableSchema getEventsSchema() {
+
+    return new TableSchema().setFields(
+        List.of(
+            new TableFieldSchema()
+                .setName("request_ts")
                 .setType("TIMESTAMP")
-                .setMode("REQUIRED"))
-            .set("type", new TableFieldSchema()
+                .setMode("REQUIRED"),
+            new TableFieldSchema()
+                .setName("bytes_sent")
+                .setType("INTEGER")
+                .setMode("REQUIRED"),
+            new TableFieldSchema()
+                .setName("bytes_received")
+                .setType("INTEGER")
+                .setMode("REQUIRED"),
+            new TableFieldSchema()
+                .setName("dst_hostname")
                 .setType("STRING")
-                .setMode("REQUIRED"))
-            .set("source_ip", new TableFieldSchema()
+                .setMode("NULLABLE"),
+            new TableFieldSchema()
+                .setName("dst_ip")
                 .setType("STRING")
-                .setMode("NULLABLE"))
-            .set("user_id", new TableFieldSchema()
+                .setMode("REQUIRED"),
+            new TableFieldSchema()
+                .setName("dst_port")
+                .setType("INTEGER")
+                .setMode("REQUIRED"),
+            new TableFieldSchema()
+                .setName("src_ip")
                 .setType("STRING")
-                .setMode("NULLABLE"))
-            .set("level", new TableFieldSchema()
+                .setMode("NULLABLE"),
+            new TableFieldSchema()
+                .setName("user_id")
                 .setType("STRING")
-                .setMode("REQUIRED"))
-            .set("description", new TableFieldSchema()
+                .setMode("NULLABLE"),
+            new TableFieldSchema()
+                .setName("process_name")
                 .setType("STRING")
-                .setMode("REQUIRED"));
-    return tableSchema;
+                .setMode("NULLABLE")
+        )
+    );
   }
 
 }
