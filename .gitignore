@@ -1,3 +1,7 @@
+.idea
+out
+venv
+bootstrap.sh
 .gradle
 /build/
 
