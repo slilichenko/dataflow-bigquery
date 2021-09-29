@@ -70,10 +70,8 @@ public class BigQueryWritePipeline {
 
   /**
    * Runs the pipeline
-   *
-   * @return result
    */
-  public static PipelineResult run(BigQueryWritePipelineOptions options) {
+  public static void run(BigQueryWritePipelineOptions options) {
     Pipeline pipeline = Pipeline.create(options);
 
     PCollection<String> input;
@@ -87,7 +85,6 @@ public class BigQueryWritePipeline {
       throw new RuntimeException("Either the subscription id or the file list should be provided.");
     }
 
-    // Convert raw inputs into canonical messages. Processing can vary slightly depending on the source.
     PCollection<TableRow> rows = input.apply("To TableRow", ParDo.of(new RawEventToTableRow()));
 
     Method method = getPersistenceMethod(options);
@@ -101,21 +98,23 @@ public class BigQueryWritePipeline {
     switch (method) {
       case FILE_LOADS:
         break;
+
       case STORAGE_WRITE_API:
         TableSchema schema = getEventsSchema();
-        bigQueryWriteTransform = bigQueryWriteTransform.withSchema(schema);
-        break;
-      case STREAMING_INSERTS:
         bigQueryWriteTransform = bigQueryWriteTransform
-            .withExtendedErrorInfo();
+            .withSchema(schema)
+            .withNumStorageWriteApiStreams(100);
         break;
+
+      case STREAMING_INSERTS:
+        bigQueryWriteTransform = bigQueryWriteTransform.withExtendedErrorInfo();
+        break;
+
       default:
         throw new IllegalStateException("Unhandled method " + method);
     }
 
-    WriteResult writeResult = rows
-        .apply("Save Rows to BigQuery", bigQueryWriteTransform);
-
+    WriteResult writeResult = rows.apply("Save Rows to BigQuery", bigQueryWriteTransform);
     switch (method) {
       case STREAMING_INSERTS:
         writeResult.getFailedInsertsWithErr()
@@ -136,7 +135,7 @@ public class BigQueryWritePipeline {
         break;
 
       case STORAGE_WRITE_API:
-        // TODO:
+        // TODO: check if there is a way to get errors back.
         break;
 
       default:
@@ -165,7 +164,6 @@ public class BigQueryWritePipeline {
     if (options.getRunner().getName().equalsIgnoreCase("directrunner")) {
       run.waitUntilFinish();
     }
-    return run;
   }
 
   private static Method getPersistenceMethod(BigQueryWritePipelineOptions options) {

@@ -14,7 +14,7 @@ else
 fi
 
 set -x
-./gradlew run -DmainClass=com.google.solutions.pipeline.BigQueryWritePipeline -Pargs="--jobName=data-processing-${MODE}-${PERSISTENCE/_/-} \
+./gradlew run -DmainClass=com.google.solutions.pipeline.BigQueryWritePipeline -Pargs="--jobName=data-processing-${MODE}-${PERSISTENCE//_/-} \
  --project=${PROJECT_ID}\
  --region=${GCP_REGION}\
  --maxNumWorkers=10\
