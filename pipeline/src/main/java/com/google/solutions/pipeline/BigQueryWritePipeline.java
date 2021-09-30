@@ -75,12 +75,16 @@ public class BigQueryWritePipeline {
     Pipeline pipeline = Pipeline.create(options);
 
     PCollection<String> input;
+
+    boolean streaming;
     if (options.getSubscriptionId() != null) {
-      input = pipeline.begin().apply("Read Pub/Sub",
+      input = pipeline.begin().apply("Read PubSub",
           PubsubIO.readStrings().fromSubscription(options.getSubscriptionId()));
+      streaming = true;
     } else if (options.getFileList() != null) {
       input = pipeline.begin().apply("Read GCS Files",
           TextIO.read().from(options.getFileList()));
+      streaming = false;
     } else {
       throw new RuntimeException("Either the subscription id or the file list should be provided.");
     }
@@ -104,6 +108,10 @@ public class BigQueryWritePipeline {
         bigQueryWriteTransform = bigQueryWriteTransform
             .withSchema(schema)
             .withNumStorageWriteApiStreams(100);
+        if (streaming) {
+          bigQueryWriteTransform = bigQueryWriteTransform
+              .withTriggeringFrequency(Duration.standardSeconds(20));
+        }
         break;
 
       case STREAMING_INSERTS:
