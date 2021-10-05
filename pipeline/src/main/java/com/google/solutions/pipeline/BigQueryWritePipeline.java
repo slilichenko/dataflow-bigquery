@@ -31,6 +31,7 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.Method;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.WriteDisposition;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryInsertError;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryOptions;
 import org.apache.beam.sdk.io.gcp.bigquery.WriteResult;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.metrics.Counter;
@@ -104,18 +105,27 @@ public class BigQueryWritePipeline {
         break;
 
       case STORAGE_WRITE_API:
+        /* Explicitly setting Storage Write API's stream number and triggering frequency
+         * is not needed if the corresponding BigQueryOption parameters are set. Here it's
+         * done for illustration purposes.
+         */
+        BigQueryOptions bigQueryOptions = options.as(BigQueryOptions.class);
+
         TableSchema schema = getEventsSchema();
         bigQueryWriteTransform = bigQueryWriteTransform
             .withSchema(schema)
-            .withNumStorageWriteApiStreams(100);
+            .withNumStorageWriteApiStreams(bigQueryOptions.getNumStorageWriteApiStreams());
         if (streaming) {
           bigQueryWriteTransform = bigQueryWriteTransform
-              .withTriggeringFrequency(Duration.standardSeconds(20));
+              .withTriggeringFrequency(Duration
+                  .standardSeconds(bigQueryOptions.getStorageWriteApiTriggeringFrequencySec()));
         }
         break;
 
       case STREAMING_INSERTS:
-        bigQueryWriteTransform = bigQueryWriteTransform.withExtendedErrorInfo();
+        bigQueryWriteTransform = bigQueryWriteTransform
+            .withAutoSharding()
+            .withExtendedErrorInfo();
         break;
 
       default:
@@ -149,24 +159,6 @@ public class BigQueryWritePipeline {
       default:
         throw new IllegalStateException("Unhandled method " + method);
     }
-
-//    outputs.userEventFindings.apply("Persist User Event Findings",
-//        new PTransform<>() {
-//          @Override
-//          public POutput expand(PCollection<UserEventFinding> input1) {
-//            return input1
-//                .apply("User Event Findings to Row", ParDo.of(new UserEventFindingToTableRow()))
-//                .apply("Save to BigQuery",
-//                    BigQueryIO.writeTableRows().to(
-//                        options.getDatasetName() + '.' + options.getUserEventFindingsTable())
-//                        .withWriteDisposition(WriteDisposition.WRITE_APPEND)
-//                        .withCreateDisposition(CreateDisposition.CREATE_NEVER)
-//                        .withMethod(Method.STORAGE_WRITE_API)
-//                        .withNumStorageWriteApiStreams(3)
-//                        .withSchema(schema)
-//                        .withTriggeringFrequency(Duration.standardSeconds(60)));
-//          }
-//        });
 
     PipelineResult run = pipeline.run();
     if (options.getRunner().getName().equalsIgnoreCase("directrunner")) {
