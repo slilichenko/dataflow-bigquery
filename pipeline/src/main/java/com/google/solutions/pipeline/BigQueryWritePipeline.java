@@ -37,6 +37,8 @@ import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.metrics.Counter;
 import org.apache.beam.sdk.metrics.Metrics;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import org.apache.beam.sdk.transforms.Create;
+import org.apache.beam.sdk.transforms.Create.Values;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
@@ -77,14 +79,19 @@ public class BigQueryWritePipeline {
 
     PCollection<String> input;
 
+    boolean testErrorHandling = options.getTestErrorHandling();
     boolean streaming;
     if (options.getSubscriptionId() != null) {
       input = pipeline.begin().apply("Read PubSub",
           PubsubIO.readStrings().fromSubscription(options.getSubscriptionId()));
       streaming = true;
     } else if (options.getFileList() != null) {
-      input = pipeline.begin().apply("Read GCS Files",
-          TextIO.read().from(options.getFileList()));
+      if(testErrorHandling) {
+        input = pipeline.begin().apply("Generate Events", Create.of(eventsToFailOnPersistence()));
+      } else {
+        input = pipeline.begin().apply("Read GCS Files",
+            TextIO.read().from(options.getFileList()));
+      }
       streaming = false;
     } else {
       throw new RuntimeException("Either the subscription id or the file list should be provided.");
@@ -113,8 +120,13 @@ public class BigQueryWritePipeline {
 
         TableSchema schema = getEventsSchema();
         bigQueryWriteTransform = bigQueryWriteTransform
-            .withSchema(schema)
-            .withNumStorageWriteApiStreams(bigQueryOptions.getNumStorageWriteApiStreams());
+            .withSchema(schema);
+
+        Integer numStorageWriteApiStreams = bigQueryOptions.getNumStorageWriteApiStreams();
+        if(numStorageWriteApiStreams != null && numStorageWriteApiStreams > 0) {
+          bigQueryWriteTransform = bigQueryWriteTransform
+              .withNumStorageWriteApiStreams(numStorageWriteApiStreams);
+        }
         if (streaming) {
           bigQueryWriteTransform = bigQueryWriteTransform
               .withTriggeringFrequency(Duration
@@ -123,9 +135,10 @@ public class BigQueryWritePipeline {
         break;
 
       case STREAMING_INSERTS:
-        bigQueryWriteTransform = bigQueryWriteTransform
-            .withAutoSharding()
-            .withExtendedErrorInfo();
+        bigQueryWriteTransform = bigQueryWriteTransform.withExtendedErrorInfo();
+        if(streaming) {
+          bigQueryWriteTransform = bigQueryWriteTransform.withAutoSharding();
+        }
         break;
 
       default:
@@ -133,6 +146,7 @@ public class BigQueryWritePipeline {
     }
 
     WriteResult writeResult = rows.apply("Save Rows to BigQuery", bigQueryWriteTransform);
+
     switch (method) {
       case STREAMING_INSERTS:
         writeResult.getFailedInsertsWithErr()
@@ -164,6 +178,14 @@ public class BigQueryWritePipeline {
     if (options.getRunner().getName().equalsIgnoreCase("directrunner")) {
       run.waitUntilFinish();
     }
+  }
+
+  private static Iterable<String> eventsToFailOnPersistence() {
+    return List.of(
+        "{\"bytes_sent\": \"Should fail on conversion of String to Integer\", \"destination_ip\": \"10.2.1.1\", \"destination_port\": 80, "
+            + "\"process\": \"process1\", \"request_timestamp\": \"Show fail on timestamp parsing\""
+            + ", \"bytes_received\": 200, \"source_ip\": \"192.6.6.1\", \"user\": \"user1\"}"
+    );
   }
 
   private static Method getPersistenceMethod(BigQueryWritePipelineOptions options) {
