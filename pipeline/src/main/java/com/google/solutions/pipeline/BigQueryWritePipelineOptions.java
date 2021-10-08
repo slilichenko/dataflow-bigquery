@@ -54,9 +54,15 @@ public interface BigQueryWritePipelineOptions extends DataflowPipelineOptions {
   String getPersistenceMethod();
   void setPersistenceMethod(String value);
 
-  @Description("Test error handling")
+  @Description("Test data conversion error handling")
   @Required
   @Default.Boolean(false)
   boolean getTestErrorHandling();
   void setTestErrorHandling(boolean value);
+
+  @Description("Test incompatible schema error handling")
+  @Required
+  @Default.Boolean(false)
+  boolean getTestIncompatibleSchemaHandling();
+  void setTestIncompatibleSchemaHandling(boolean value);
 }

@@ -42,7 +42,8 @@ resource "google_bigquery_table" "events" {
   {
     "mode": "REQUIRED",
     "name": "dst_ip",
-    "type": "STRING"
+    "type": "STRING",
+    "maxLength": "15"
   },
   {
     "mode": "REQUIRED",

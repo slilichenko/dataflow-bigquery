@@ -38,7 +38,6 @@ import org.apache.beam.sdk.metrics.Counter;
 import org.apache.beam.sdk.metrics.Metrics;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.Create;
-import org.apache.beam.sdk.transforms.Create.Values;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
@@ -86,8 +85,8 @@ public class BigQueryWritePipeline {
           PubsubIO.readStrings().fromSubscription(options.getSubscriptionId()));
       streaming = true;
     } else if (options.getFileList() != null) {
-      if(testErrorHandling) {
-        input = pipeline.begin().apply("Generate Events", Create.of(eventsToFailOnPersistence()));
+      if(testErrorHandling || options.getTestIncompatibleSchemaHandling()) {
+        input = pipeline.begin().apply("Generate Events", Create.of(eventsWithIncompatibleValues()));
       } else {
         input = pipeline.begin().apply("Read GCS Files",
             TextIO.read().from(options.getFileList()));
@@ -118,7 +117,7 @@ public class BigQueryWritePipeline {
          */
         BigQueryOptions bigQueryOptions = options.as(BigQueryOptions.class);
 
-        TableSchema schema = getEventsSchema();
+        TableSchema schema = getEventsSchema(options.getTestIncompatibleSchemaHandling());
         bigQueryWriteTransform = bigQueryWriteTransform
             .withSchema(schema);
 
@@ -135,7 +134,7 @@ public class BigQueryWritePipeline {
         break;
 
       case STREAMING_INSERTS:
-        bigQueryWriteTransform = bigQueryWriteTransform.withExtendedErrorInfo();
+        bigQueryWriteTransform = bigQueryWriteTransform.withExtendedErrorInfo().skipInvalidRows();
         if(streaming) {
           bigQueryWriteTransform = bigQueryWriteTransform.withAutoSharding();
         }
@@ -180,11 +179,20 @@ public class BigQueryWritePipeline {
     }
   }
 
-  private static Iterable<String> eventsToFailOnPersistence() {
+  private static Iterable<String> eventsWithIncompatibleValues() {
     return List.of(
-        "{\"bytes_sent\": \"Should fail on conversion of String to Integer\", \"destination_ip\": \"10.2.1.1\", \"destination_port\": 80, "
-            + "\"process\": \"process1\", \"request_timestamp\": \"Show fail on timestamp parsing\""
-            + ", \"bytes_received\": 200, \"source_ip\": \"192.6.6.1\", \"user\": \"user1\"}"
+        "{"
+            + "\"bytes_sent\": 123, "
+            + "\"destination_ip\": \"max length of the field is defined as 15 - should fail\", "
+            + "\"destination_port\": 80, "
+            + "\"process\": \"process1\", "
+            + " \"bytes_received\": 200, \"source_ip\": \"192.6.6.1\", \"user\": \"user1\"}"
+//        ,
+//        "{\"bytes_sent\": \"Should fail on conversion of String to Integer\", "
+//            + "\"destination_ip\": \"10.2.1.1\", \"destination_port\": 80, "
+//            + "\"process\": \"process1\""
+//            + ", \"bytes_received\": 200, \"source_ip\": \"192.6.6.1\", \"user\": \"user1\"}"
+
     );
   }
 
@@ -200,7 +208,7 @@ public class BigQueryWritePipeline {
         .valueOf(options.getPersistenceMethod());
   }
 
-  static TableSchema getEventsSchema() {
+  static TableSchema getEventsSchema(boolean testIncompatibleSchemaHandling) {
 
     return new TableSchema().setFields(
         List.of(
@@ -210,7 +218,7 @@ public class BigQueryWritePipeline {
                 .setMode("REQUIRED"),
             new TableFieldSchema()
                 .setName("bytes_sent")
-                .setType("INTEGER")
+                .setType(testIncompatibleSchemaHandling ? "STRING" : "INTEGER")
                 .setMode("REQUIRED"),
             new TableFieldSchema()
                 .setName("bytes_received")
