@@ -84,7 +84,7 @@ public class WriteToBigQuery {
     try (JsonStreamWriter writer =
         JsonStreamWriter.newBuilder(writeStream.getName(), writeStream.getTableSchema())
             .build()) {
-      // Write two batches to the streamPrototype, each with 10 JSON records.
+      // Write two batches, each with 10 JSON records.
       for (int i = 0; i < 2; i++) {
         // Create a JSON object that is compatible with the table schema.
         JSONArray jsonArr = new JSONArray();
@@ -92,7 +92,9 @@ public class WriteToBigQuery {
           JSONObject record = new JSONObject();
           record.put("user_id",
               String.format("user %s-%03d-%03d", writeType.toString().toLowerCase(), i, j));
-          record.put("request_ts", Instant.now().toEpochMilli());
+          Instant now = Instant.now();
+          record
+              .put("request_ts", now.toEpochMilli() * 1000 + now.getNano() / 1000); // microseconds
           record.put("bytes_sent", 234);
           record.put("bytes_received", 567);
           record.put("dst_ip", "1.2.3.4");
@@ -116,15 +118,19 @@ public class WriteToBigQuery {
             .setParent(parentTable.toString())
             .setWriteStream(streamPrototype)
             .build();
-    WriteStream writeStream = client.createWriteStream(createWriteStreamRequest);
-    return writeStream;
+    return client.createWriteStream(createWriteStreamRequest);
   }
 
   public static void main(String[] args)
       throws InterruptedException, DescriptorValidationException, IOException, ExecutionException {
-    String projectId = "event-processing-demo";
-    String datasetName = "bigquery_io";
-    String tableName = "events";
+    if(args.length != 3) {
+      // TODO: convert to CLI parser if it gets more complex than this.
+      System.err.println("WriteToBigQuery expects 3 positional parameters - project id, dataset name and table name.");
+      System.exit(-1);
+    }
+    String projectId = args[0];
+    String datasetName = args[1];
+    String tableName = args[2];
     write(projectId, datasetName, tableName, WriteStream.Type.PENDING);
     write(projectId, datasetName, tableName, WriteStream.Type.BUFFERED);
     write(projectId, datasetName, tableName, WriteStream.Type.COMMITTED);
