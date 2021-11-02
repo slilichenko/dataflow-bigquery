@@ -123,8 +123,8 @@ public class WriteToBigQuery {
   public static void main(String[] args)
       throws InterruptedException, DescriptorValidationException, IOException, ExecutionException {
     String projectId = "event-processing-demo";
-    String datasetName = "datasetName";
-    String tableName = "tableName";
+    String datasetName = "bigquery_io";
+    String tableName = "events";
     write(projectId, datasetName, tableName, WriteStream.Type.PENDING);
     write(projectId, datasetName, tableName, WriteStream.Type.BUFFERED);
     write(projectId, datasetName, tableName, WriteStream.Type.COMMITTED);
