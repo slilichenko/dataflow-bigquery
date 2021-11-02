@@ -16,7 +16,7 @@ import com.google.cloud.bigquery.storage.v1beta2.WriteStream;
 import com.google.protobuf.Descriptors.DescriptorValidationException;
 import com.google.protobuf.Int64Value;
 import java.io.IOException;
-import java.time.Instant;
+import java.util.Iterator;
 import java.util.concurrent.ExecutionException;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -24,14 +24,14 @@ import org.json.JSONObject;
 public class WriteToBigQuery {
 
   public static void write(String projectId, String datasetName, String tableName,
-      WriteStream.Type writeType)
+      WriteStream.Type writeType, Iterator<JSONObject> dataProvider)
       throws DescriptorValidationException, InterruptedException, IOException, ExecutionException {
     TableName parentTable = TableName.of(projectId, datasetName, tableName);
 
     try (BigQueryWriteClient client = BigQueryWriteClient.create()) {
       WriteStream writeStream = createWriteStream(writeType, parentTable, client);
 
-      int recordCount = appendRows(writeType, writeStream);
+      int recordCount = appendRows(writeStream, dataProvider);
 
       switch (writeType) {
         case PENDING:
@@ -78,32 +78,28 @@ public class WriteToBigQuery {
     }
   }
 
-  private static int appendRows(WriteStream.Type writeType, WriteStream writeStream)
+  private static int appendRows(WriteStream writeStream, Iterator<JSONObject> dataProvider)
       throws InterruptedException, ExecutionException, DescriptorValidationException, IOException {
     int recordCount = 0;
+    int batchSize = 10;
     try (JsonStreamWriter writer =
         JsonStreamWriter.newBuilder(writeStream.getName(), writeStream.getTableSchema())
             .build()) {
-      // Write two batches, each with 10 JSON records.
-      for (int i = 0; i < 2; i++) {
-        // Create a JSON object that is compatible with the table schema.
-        JSONArray jsonArr = new JSONArray();
-        for (int j = 0; j < 10; j++) {
-          JSONObject record = new JSONObject();
-          record.put("user_id",
-              String.format("user %s-%03d-%03d", writeType.toString().toLowerCase(), i, j));
-          Instant now = Instant.now();
-          record
-              .put("request_ts", now.toEpochMilli() * 1000 + now.getNano() / 1000); // microseconds
-          record.put("bytes_sent", 234);
-          record.put("bytes_received", 567);
-          record.put("dst_ip", "1.2.3.4");
-          record.put("dst_port", 8080);
-          jsonArr.put(record);
-          ++recordCount;
+      JSONArray jsonArr = new JSONArray();
+      while (dataProvider.hasNext()) {
+        JSONObject record = dataProvider.next();
+        ++recordCount;
+        jsonArr.put(record);
+        if (jsonArr.length() % batchSize == 0) {
+          ApiFuture<AppendRowsResponse> future = writer.append(jsonArr);
+          future.get();
+
+          jsonArr = new JSONArray();
         }
+      }
+      if (jsonArr.length() > 0) {
         ApiFuture<AppendRowsResponse> future = writer.append(jsonArr);
-        AppendRowsResponse response = future.get();
+        future.get();
       }
     }
     return recordCount;
@@ -123,16 +119,20 @@ public class WriteToBigQuery {
 
   public static void main(String[] args)
       throws InterruptedException, DescriptorValidationException, IOException, ExecutionException {
-    if(args.length != 3) {
+    if (args.length != 3) {
       // TODO: convert to CLI parser if it gets more complex than this.
-      System.err.println("WriteToBigQuery expects 3 positional parameters - project id, dataset name and table name.");
+      System.err.println(
+          "WriteToBigQuery expects 3 positional parameters - project id, dataset name and table name.");
       System.exit(-1);
     }
     String projectId = args[0];
     String datasetName = args[1];
     String tableName = args[2];
-    write(projectId, datasetName, tableName, WriteStream.Type.PENDING);
-    write(projectId, datasetName, tableName, WriteStream.Type.BUFFERED);
-    write(projectId, datasetName, tableName, WriteStream.Type.COMMITTED);
+    write(projectId, datasetName, tableName, WriteStream.Type.PENDING,
+        new EventRecordGenerator().getData(20, "pending"));
+    write(projectId, datasetName, tableName, WriteStream.Type.BUFFERED,
+        new EventRecordGenerator().getData(30, "buffered"));
+    write(projectId, datasetName, tableName, WriteStream.Type.COMMITTED,
+        new EventRecordGenerator().getData(40, "committed"));
   }
 }
