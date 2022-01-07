@@ -23,6 +23,9 @@ PERSISTENCE=$3
 
 JOB_NAME="data-processing-${MODE}-${PERSISTENCE//_/-}"
 
+# EXPERIMENTS=enable_recommendations,enable_google_cloud_profiler,enable_google_cloud_heap_sampling
+EXPERIMENTS=enable_recommendations
+
 if [ ${MODE} = 'streaming' ] ; then
   PARAMS="--enableStreamingEngine --diskSizeGb=30 --subscriptionId=${EVENT_SUB}"
 elif [ ${MODE} = 'batch' ]; then
@@ -46,7 +49,7 @@ set -x
  --maxNumWorkers=10\
  --runner=${RUNNER}\
  --datasetName=${DATASET}\
- --experiments=enable_recommendations\
+ --experiments=${EXPERIMENTS}\
  --persistenceMethod=${PERSISTENCE}\
  ${PARAMS}"
 

@@ -85,8 +85,9 @@ public class BigQueryWritePipeline {
           PubsubIO.readStrings().fromSubscription(options.getSubscriptionId()));
       streaming = true;
     } else if (options.getFileList() != null) {
-      if(testErrorHandling || options.getTestIncompatibleSchemaHandling()) {
-        input = pipeline.begin().apply("Generate Events", Create.of(eventsWithIncompatibleValues()));
+      if (testErrorHandling || options.getTestIncompatibleSchemaHandling()) {
+        input = pipeline.begin()
+            .apply("Generate Events", Create.of(eventsWithIncompatibleValues()));
       } else {
         input = pipeline.begin().apply("Read GCS Files",
             TextIO.read().from(options.getFileList()));
@@ -101,13 +102,17 @@ public class BigQueryWritePipeline {
     Method method = getPersistenceMethod(options);
 
     Write<TableRow> bigQueryWriteTransform = BigQueryIO.writeTableRows()
-        .to(options.getDatasetName() + '.' + options.getEventsTable())
+        .to(projectId(options) + '.' +
+            options.getDatasetName() + '.' + options.getEventsTable())
         .withWriteDisposition(WriteDisposition.WRITE_APPEND)
         .withCreateDisposition(CreateDisposition.CREATE_NEVER)
         .withMethod(method);
 
     switch (method) {
       case FILE_LOADS:
+        break;
+
+      case STORAGE_API_AT_LEAST_ONCE:
         break;
 
       case STORAGE_WRITE_API:
@@ -122,7 +127,7 @@ public class BigQueryWritePipeline {
             .withSchema(schema);
 
         Integer numStorageWriteApiStreams = bigQueryOptions.getNumStorageWriteApiStreams();
-        if(numStorageWriteApiStreams != null && numStorageWriteApiStreams > 0) {
+        if (numStorageWriteApiStreams != null && numStorageWriteApiStreams > 0) {
           bigQueryWriteTransform = bigQueryWriteTransform
               .withNumStorageWriteApiStreams(numStorageWriteApiStreams);
         }
@@ -135,7 +140,7 @@ public class BigQueryWritePipeline {
 
       case STREAMING_INSERTS:
         bigQueryWriteTransform = bigQueryWriteTransform.withExtendedErrorInfo().skipInvalidRows();
-        if(streaming) {
+        if (streaming) {
           bigQueryWriteTransform = bigQueryWriteTransform.withAutoSharding();
         }
         break;
@@ -169,6 +174,9 @@ public class BigQueryWritePipeline {
         // TODO: check if there is a way to get errors back.
         break;
 
+      case STORAGE_API_AT_LEAST_ONCE:
+        break;
+
       default:
         throw new IllegalStateException("Unhandled method " + method);
     }
@@ -177,6 +185,12 @@ public class BigQueryWritePipeline {
     if (options.getRunner().getName().equalsIgnoreCase("directrunner")) {
       run.waitUntilFinish();
     }
+  }
+
+  private static String projectId(BigQueryWritePipelineOptions options) {
+    return options.getBigQueryProject() == null
+        ? options.getProject()
+        : options.getBigQueryProject();
   }
 
   private static Iterable<String> eventsWithIncompatibleValues() {
@@ -199,7 +213,8 @@ public class BigQueryWritePipeline {
   private static Method getPersistenceMethod(BigQueryWritePipelineOptions options) {
     Set<String> validPersistenceMethods = Set
         .of(Method.STORAGE_WRITE_API.toString(), Method.FILE_LOADS.toString(),
-            Method.STREAMING_INSERTS.toString());
+            Method.STREAMING_INSERTS.toString(),
+            Method.STORAGE_API_AT_LEAST_ONCE.toString());
     if (!validPersistenceMethods.contains(options.getPersistenceMethod())) {
       throw new IllegalArgumentException(
           "Persistence method must one of " + validPersistenceMethods);
