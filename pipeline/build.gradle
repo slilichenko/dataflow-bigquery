@@ -16,7 +16,7 @@
 
 buildscript {
     ext {
-        dataflowBeamVersion = '2.35.0'
+        dataflowBeamVersion = '2.36.0'
     }
     repositories {
         mavenCentral()
@@ -53,9 +53,6 @@ tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
 }
 
-repositories {
-    mavenCentral()
-}
 
 configurations.all {
     resolutionStrategy.eachDependency { details ->

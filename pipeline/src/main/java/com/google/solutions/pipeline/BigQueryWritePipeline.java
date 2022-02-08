@@ -122,9 +122,10 @@ public class BigQueryWritePipeline {
          */
         BigQueryOptions bigQueryOptions = options.as(BigQueryOptions.class);
 
-        TableSchema schema = getEventsSchema(options.getTestIncompatibleSchemaHandling());
-        bigQueryWriteTransform = bigQueryWriteTransform
-            .withSchema(schema);
+        // TODO: add options to test schema.
+        // TableSchema schema = getEventsSchema(options.getTestIncompatibleSchemaHandling());
+        // bigQueryWriteTransform = bigQueryWriteTransform
+        //     .withSchema(schema);
 
         Integer numStorageWriteApiStreams = bigQueryOptions.getNumStorageWriteApiStreams();
         if (numStorageWriteApiStreams != null && numStorageWriteApiStreams > 0) {
