@@ -16,7 +16,15 @@
 
 package com.google.solutions.direct;
 
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.http.HttpRequestInitializer;
+import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.core.ApiFuture;
+import com.google.api.services.bigquery.Bigquery;
+import com.google.api.services.bigquery.model.Streamingbuffer;
+import com.google.api.services.bigquery.model.Table;
+import com.google.auth.http.HttpCredentialsAdapter;
+import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.bigquery.storage.v1beta2.AppendRowsResponse;
 import com.google.cloud.bigquery.storage.v1beta2.BatchCommitWriteStreamsRequest;
 import com.google.cloud.bigquery.storage.v1beta2.BatchCommitWriteStreamsResponse;
@@ -32,17 +40,57 @@ import com.google.cloud.bigquery.storage.v1beta2.WriteStream;
 import com.google.protobuf.Descriptors.DescriptorValidationException;
 import com.google.protobuf.Int64Value;
 import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.util.Iterator;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class WriteToBigQuery {
 
-  public static void write(String projectId, String datasetName, String tableName,
+  public static final Logger log = Logger.getLogger(WriteToBigQuery.class.getName());
+
+  private Bigquery bigquery;
+
+  public void printStreamingBufferStats(String where, TableName tableName)
+      throws GeneralSecurityException, IOException {
+    Bigquery bigquery = getBigquery();
+
+    Table table = bigquery.tables().get(tableName.getProject(), tableName.getDataset(),
+        tableName.getTable()).execute();
+    Streamingbuffer streamingBuffer = table.getStreamingBuffer();
+    if (streamingBuffer == null) {
+      log.info(where + " No streaming buffer");
+    } else {
+      log.info(where + " Streaming buffer: " + streamingBuffer);
+    }
+  }
+
+  private Bigquery getBigquery() throws IOException, GeneralSecurityException {
+    if(bigquery != null) {
+      return bigquery;
+    }
+    GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
+    HttpRequestInitializer requestInitializer = new HttpCredentialsAdapter(credentials);
+
+    Bigquery bigquery = new Bigquery.Builder(
+        GoogleNetHttpTransport.newTrustedTransport(), new GsonFactory(), requestInitializer
+    )
+        .setApplicationName("BigQuery load test")
+        .build();
+
+    this.bigquery = bigquery;
+    return bigquery;
+  }
+
+  public void write(String projectId, String datasetName, String tableName,
       WriteStream.Type writeType, Iterator<JSONObject> dataProvider)
-      throws DescriptorValidationException, InterruptedException, IOException, ExecutionException {
+      throws DescriptorValidationException, InterruptedException, IOException, ExecutionException, GeneralSecurityException {
     TableName parentTable = TableName.of(projectId, datasetName, tableName);
+
+    log.info("Writing to " + parentTable + " using " + writeType + " mode");
+    printStreamingBufferStats("Before writing", parentTable);
 
     try (BigQueryWriteClient client = BigQueryWriteClient.create()) {
       WriteStream writeStream = createWriteStream(writeType, parentTable, client);
@@ -51,11 +99,13 @@ public class WriteToBigQuery {
 
       switch (writeType) {
         case PENDING:
+          printStreamingBufferStats("Before finalize", parentTable);
           FinalizeWriteStreamResponse finalizeResponse =
               client.finalizeWriteStream(writeStream.getName());
-          System.out.println("Rows finalized: " + finalizeResponse.getRowCount());
+          log.info("Rows finalized: " + finalizeResponse.getRowCount());
 
           // Commit the streams.
+          printStreamingBufferStats("After finalize, before commit", parentTable);
           BatchCommitWriteStreamsRequest commitRequest =
               BatchCommitWriteStreamsRequest.newBuilder()
                   .setParent(parentTable.toString())
@@ -66,14 +116,15 @@ public class WriteToBigQuery {
           // If the response does not have a commit time, it means the commit operation failed.
           if (!commitResponse.hasCommitTime()) {
             for (StorageError err : commitResponse.getStreamErrorsList()) {
-              System.out.println(err.getErrorMessage());
+              log.warning(err.getErrorMessage());
             }
             throw new RuntimeException("Error committing the streams");
           }
-          System.out.println("Appended and committed records successfully.");
+          log.info("Appended and committed records successfully.");
           break;
 
         case BUFFERED:
+          printStreamingBufferStats("Before flush", parentTable);
           FlushRowsRequest flushRowsRequest =
               FlushRowsRequest.newBuilder()
                   .setWriteStream(writeStream.getName())
@@ -81,17 +132,23 @@ public class WriteToBigQuery {
                       Int64Value.of(recordCount - 1)) // Advance the cursor to the latest record.
                   .build();
           FlushRowsResponse flushRowsResponse = client.flushRows(flushRowsRequest);
-          System.out.println("Flushed up to offset " + flushRowsResponse.getOffset());
+          log.info("Flushed up to offset " + flushRowsResponse.getOffset());
+          printStreamingBufferStats("After flush, before finalize", parentTable);
+          finalizeResponse = client.finalizeWriteStream(writeStream.getName());
+          log.info("Rows finalized: " + finalizeResponse.getRowCount());
           break;
 
         case COMMITTED:
-          System.out.println("Auto committed " + recordCount + " rows.");
+          printStreamingBufferStats("Before finalize", parentTable);
+          finalizeResponse = client.finalizeWriteStream(writeStream.getName());
+          log.info("Rows finalized: " + finalizeResponse.getRowCount());
           break;
 
         default:
           throw new RuntimeException("Unimplemented type " + writeType);
       }
     }
+    printStreamingBufferStats("After completion", parentTable);
   }
 
   private static int appendRows(WriteStream writeStream, Iterator<JSONObject> dataProvider)
@@ -134,21 +191,22 @@ public class WriteToBigQuery {
   }
 
   public static void main(String[] args)
-      throws InterruptedException, DescriptorValidationException, IOException, ExecutionException {
+      throws InterruptedException, DescriptorValidationException, IOException, ExecutionException, GeneralSecurityException {
     if (args.length != 3) {
       // TODO: convert to CLI parser if it gets more complex than this.
-      System.err.println(
+      log.warning(
           "WriteToBigQuery expects 3 positional parameters - project id, dataset name and table name.");
       System.exit(-1);
     }
     String projectId = args[0];
     String datasetName = args[1];
     String tableName = args[2];
-    write(projectId, datasetName, tableName, WriteStream.Type.PENDING,
+    WriteToBigQuery writer = new WriteToBigQuery();
+    writer.write(projectId, datasetName, tableName, WriteStream.Type.PENDING,
         new EventRecordGenerator().getData(20, "pending"));
-    write(projectId, datasetName, tableName, WriteStream.Type.BUFFERED,
+    writer.write(projectId, datasetName, tableName, WriteStream.Type.BUFFERED,
         new EventRecordGenerator().getData(30, "buffered"));
-    write(projectId, datasetName, tableName, WriteStream.Type.COMMITTED,
+    writer.write(projectId, datasetName, tableName, WriteStream.Type.COMMITTED,
         new EventRecordGenerator().getData(40, "committed"));
   }
 }
