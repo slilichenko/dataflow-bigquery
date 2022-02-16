@@ -110,6 +110,11 @@ public class BigQueryWritePipeline {
 
     switch (method) {
       case FILE_LOADS:
+        if(streaming) {
+          bigQueryWriteTransform = bigQueryWriteTransform
+              .withAutoSharding()
+              .withTriggeringFrequency(Duration.standardSeconds(10));
+        }
         break;
 
       case STORAGE_API_AT_LEAST_ONCE:

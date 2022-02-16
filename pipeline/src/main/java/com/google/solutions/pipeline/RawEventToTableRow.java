@@ -52,6 +52,9 @@ public class RawEventToTableRow extends DoFn<String, TableRow> {
     row.set("dst_ip", event.get("destination_ip"));
     row.set("dst_port", event.get("destination_port"));
     row.set("src_ip", event.get("source_ip"));
+    if(event.containsKey("random_id")) {
+      row.set("random_id", event.get("random_id"));
+    }
     row.set("bytes_sent", event.get("bytes_sent"));
     row.set("bytes_received", event.get("bytes_received"));
     row.set("user_id", event.get("user"));

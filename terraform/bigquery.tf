@@ -30,6 +30,11 @@ resource "google_bigquery_table" "events" {
     "type": "INTEGER"
   },
   {
+    "mode": "NULLABLE",
+    "name": "random_id",
+    "type": "BIGNUMERIC"
+  },
+  {
     "mode": "REQUIRED",
     "name": "bytes_received",
     "type": "INTEGER"

@@ -17,8 +17,8 @@
 set -e
 set -u
 
-MODE=batch
+MODE=streaming
 RUNNER=DataflowRunner
-PERSISTENCE=STORAGE_API_AT_LEAST_ONCE
+PERSISTENCE=FILE_LOADS
 
 ./run-pipeline.sh ${MODE} ${RUNNER} ${PERSISTENCE}
