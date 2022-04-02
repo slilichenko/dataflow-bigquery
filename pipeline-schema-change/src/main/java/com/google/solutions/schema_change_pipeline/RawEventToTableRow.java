@@ -46,8 +46,11 @@ public class RawEventToTableRow extends DoFn<String, TableRow> {
       return;
     }
     TableRow row = new TableRow();
-    if(event.containsKey("newly_added")) {
-      row.set("newly_added", event.get("newly_added"));
+    String newlyAdded = "newly_added";
+    if(event.containsKey(newlyAdded)) {
+      Object value = event.get(newlyAdded);
+      row.set(newlyAdded, value);
+      LOG.info("Adding row with new column and value: " + value);
     }
 
     row.set("request_ts", Instant.now().toString());
