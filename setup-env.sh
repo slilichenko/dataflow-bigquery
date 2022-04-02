@@ -25,6 +25,7 @@ cd terraform
 terraform init && terraform apply
 
 export EVENT_GENERATOR_TEMPLATE=$(terraform output -raw event-generator-template)
+export EVENT_GENERATOR_NEW_COLUMN_TEMPLATE=$(terraform output -raw event-generator-template-new-column)
 export EVENT_TOPIC=$(terraform output -raw event-topic)
 export EVENT_SUB=$(terraform output -raw event-sub)
 export DATASET=$(terraform output -raw bq-dataset)
