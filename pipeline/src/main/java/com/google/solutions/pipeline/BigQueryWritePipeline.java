@@ -17,11 +17,13 @@ package com.google.solutions.pipeline;
 
 
 import com.google.api.services.bigquery.model.TableFieldSchema;
+import com.google.api.services.bigquery.model.TableReference;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import org.apache.arrow.flatbuf.Int;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.io.TextIO;
@@ -32,6 +34,8 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.Method;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.WriteDisposition;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryInsertError;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryOptions;
+import org.apache.beam.sdk.io.gcp.bigquery.DynamicDestinations;
+import org.apache.beam.sdk.io.gcp.bigquery.TableDestination;
 import org.apache.beam.sdk.io.gcp.bigquery.WriteResult;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.metrics.Counter;
@@ -43,6 +47,7 @@ import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
 import org.apache.beam.sdk.transforms.windowing.Window;
 import org.apache.beam.sdk.values.PCollection;
+import org.apache.beam.sdk.values.ValueInSingleWindow;
 import org.joda.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,8 +78,11 @@ public class BigQueryWritePipeline {
   /**
    * Runs the pipeline
    */
-  public static void run(BigQueryWritePipelineOptions options) {
+  public static void run(final BigQueryWritePipelineOptions options) {
     Pipeline pipeline = Pipeline.create(options);
+    final int numberOfTables = options.getNumberOfTables();
+    String baseTableName = projectId(options) + '.' +
+        options.getDatasetName() + '.' + options.getEventsTable();
 
     PCollection<String> input;
 
@@ -102,15 +110,37 @@ public class BigQueryWritePipeline {
     Method method = getPersistenceMethod(options);
 
     Write<TableRow> bigQueryWriteTransform = BigQueryIO.writeTableRows()
-        .to(projectId(options) + '.' +
-            options.getDatasetName() + '.' + options.getEventsTable())
+        .to(new DynamicDestinations<TableRow, Integer>() {
+
+          @Override
+          public Integer getDestination(ValueInSingleWindow<TableRow> element) {
+            String randomId = (String) element.getValue().get("random_id");
+            randomId = randomId.substring(0, randomId.indexOf('.'));
+
+            int destinationTableSuffix = Integer.parseInt(randomId) % numberOfTables;
+            return destinationTableSuffix;
+          }
+
+          @Override
+          public TableDestination getTable(Integer suffix) {
+            return new TableDestination(
+                baseTableName + suffix,
+                "Event table #" + suffix);
+          }
+
+          @Override
+          public TableSchema getSchema(Integer destination) {
+            // All tables have the same schema.
+            return getEventsSchema(false);
+          }
+        })
         .withWriteDisposition(WriteDisposition.WRITE_APPEND)
         .withCreateDisposition(CreateDisposition.CREATE_NEVER)
         .withMethod(method);
 
     switch (method) {
       case FILE_LOADS:
-        if(streaming) {
+        if (streaming) {
           bigQueryWriteTransform = bigQueryWriteTransform
               .withAutoSharding()
               .withTriggeringFrequency(Duration.standardSeconds(10));
@@ -268,6 +298,10 @@ public class BigQueryWritePipeline {
             new TableFieldSchema()
                 .setName("process_name")
                 .setType("STRING")
+                .setMode("NULLABLE"),
+            new TableFieldSchema()
+                .setName("random_id")
+                .setType("BIGNUMERIC")
                 .setMode("NULLABLE")
         )
     );

@@ -9,9 +9,10 @@ output "bq-dataset" {
 }
 
 resource "google_bigquery_table" "events" {
+  count = var.number_of_tables
   deletion_protection = false
   dataset_id = google_bigquery_dataset.bigquery_io.dataset_id
-  table_id = "events"
+  table_id = "events${count.index}"
   description = "All events"
   time_partitioning {
     type = "DAY"

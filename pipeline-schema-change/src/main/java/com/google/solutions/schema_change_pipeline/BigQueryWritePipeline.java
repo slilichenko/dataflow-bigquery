@@ -185,6 +185,7 @@ public class BigQueryWritePipeline {
 
     PipelineResult run = pipeline.run();
     if (options.getRunner().getName().equalsIgnoreCase("directrunner")) {
+      LOG.info("Waiting until the job finishes.");
       run.waitUntilFinish();
     }
   }

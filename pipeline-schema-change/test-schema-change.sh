@@ -23,7 +23,7 @@ echo "Setting up the environment..."
 source setup-env.sh
 
 echo "Starting the event generation pipeline..."
-./start-event-generation.sh 10
+#./start-event-generation.sh 10
 
 echo "Start the streaming pipeline..."
 cd pipeline-schema-change

@@ -7,3 +7,7 @@ variable "region" {
 variable "bigquery_dataset_location" {
   type = string
 }
+variable "number_of_tables" {
+  type = number
+  default = 10
+}

@@ -16,7 +16,7 @@
 
 buildscript {
     ext {
-        dataflowBeamVersion = '2.38.0-SNAPSHOT'
+        dataflowBeamVersion = '2.39.0-SNAPSHOT'
     }
 }
 

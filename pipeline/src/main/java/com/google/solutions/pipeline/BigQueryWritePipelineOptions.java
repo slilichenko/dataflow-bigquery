@@ -65,4 +65,9 @@ public interface BigQueryWritePipelineOptions extends DataflowPipelineOptions {
   @Default.Boolean(false)
   boolean getTestIncompatibleSchemaHandling();
   void setTestIncompatibleSchemaHandling(boolean value);
+
+  @Description("Number of tables to write to.")
+  @Default.Integer(10)
+  int getNumberOfTables();
+  void setNumberOfTables(int value);
 }
