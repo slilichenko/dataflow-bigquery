@@ -24,15 +24,11 @@ import org.apache.beam.sdk.options.Validation.Required;
  */
 public interface BigQueryWritePipelineOptions extends DataflowPipelineOptions {
 
-  @Description("Pub/Sub subscription to receive raw messages from")
+  @Description("Pub/Sub subscription")
+  @Required
   String getSubscriptionId();
 
   void setSubscriptionId(String value);
-
-  @Description("Google Cloud Storage files to process")
-  String getFileList();
-
-  void setFileList(String value);
 
   @Description("BigQuery dataset")
   @Required
@@ -42,7 +38,7 @@ public interface BigQueryWritePipelineOptions extends DataflowPipelineOptions {
 
   @Description("Table name for events")
   @Required
-  @Default.String("events")
+  @Default.String("events0")
   String getEventsTable();
 
   void setEventsTable(String value);
@@ -52,15 +48,4 @@ public interface BigQueryWritePipelineOptions extends DataflowPipelineOptions {
   String getPersistenceMethod();
   void setPersistenceMethod(String value);
 
-  @Description("Test data conversion error handling")
-  @Required
-  @Default.Boolean(false)
-  boolean getTestErrorHandling();
-  void setTestErrorHandling(boolean value);
-
-  @Description("Test incompatible schema error handling")
-  @Required
-  @Default.Boolean(false)
-  boolean getTestIncompatibleSchemaHandling();
-  void setTestIncompatibleSchemaHandling(boolean value);
 }

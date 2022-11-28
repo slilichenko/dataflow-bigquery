@@ -1,4 +1,5 @@
 resource "google_storage_bucket" "data-generator-template" {
+  location = var.region
   name = "${var.project_id}-dataflow-bq-generator-template"
   uniform_bucket_level_access = true
 }

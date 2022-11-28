@@ -18,6 +18,7 @@ package com.google.solutions.schema_change_pipeline;import com.google.api.client
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.bigquery.model.TableRow;
 import java.io.IOException;
+import java.math.BigDecimal;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.joda.time.Instant;
 import org.slf4j.Logger;
@@ -50,18 +51,18 @@ public class RawEventToTableRow extends DoFn<String, TableRow> {
     if(event.containsKey(newlyAdded)) {
       Object value = event.get(newlyAdded);
       row.set(newlyAdded, value);
-      LOG.info("Adding row with new column and value: " + value);
+      LOG.debug("Adding row with new column and value: " + value);
     }
 
     row.set("request_ts", Instant.now().toString());
     row.set("dst_ip", event.get("destination_ip"));
-    row.set("dst_port", event.get("destination_port"));
+    row.set("dst_port", ((BigDecimal)event.get("destination_port")).longValue());
     row.set("src_ip", event.get("source_ip"));
     if(event.containsKey("random_id")) {
       row.set("random_id", event.get("random_id"));
     }
-    row.set("bytes_sent", event.get("bytes_sent"));
-    row.set("bytes_received", event.get("bytes_received"));
+    row.set("bytes_sent", ((BigDecimal)event.get("bytes_sent")).longValue());
+    row.set("bytes_received", ((BigDecimal)event.get("bytes_received")).longValue());
     row.set("user_id", event.get("user"));
     row.set("process_name", event.get("process"));
 

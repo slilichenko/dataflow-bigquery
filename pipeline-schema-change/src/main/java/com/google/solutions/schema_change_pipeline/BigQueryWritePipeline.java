@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.solutions.schema_change_pipeline;import com.google.api.services.bigquery.model.TableFieldSchema;
+package com.google.solutions.schema_change_pipeline;
+
+import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
 import java.util.List;
@@ -29,6 +31,7 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.Method;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.WriteDisposition;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryInsertError;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryOptions;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryStorageApiInsertError;
 import org.apache.beam.sdk.io.gcp.bigquery.WriteResult;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.metrics.Counter;
@@ -74,24 +77,8 @@ public class BigQueryWritePipeline {
 
     PCollection<String> input;
 
-    boolean testErrorHandling = options.getTestErrorHandling();
-    boolean streaming;
-    if (options.getSubscriptionId() != null) {
-      input = pipeline.begin().apply("Read PubSub",
-          PubsubIO.readStrings().fromSubscription(options.getSubscriptionId()));
-      streaming = true;
-    } else if (options.getFileList() != null) {
-      if (testErrorHandling || options.getTestIncompatibleSchemaHandling()) {
-        input = pipeline.begin()
-            .apply("Generate Events", Create.of(eventsWithIncompatibleValues()));
-      } else {
-        input = pipeline.begin().apply("Read GCS Files",
-            TextIO.read().from(options.getFileList()));
-      }
-      streaming = false;
-    } else {
-      throw new RuntimeException("Either the subscription id or the file list should be provided.");
-    }
+    input = pipeline.begin().apply("Read PubSub",
+        PubsubIO.readStrings().fromSubscription(options.getSubscriptionId()));
 
     PCollection<TableRow> rows = input.apply("To TableRow", ParDo.of(new RawEventToTableRow()));
 
@@ -105,46 +92,14 @@ public class BigQueryWritePipeline {
         .withMethod(method);
 
     switch (method) {
-      case FILE_LOADS:
-        if(streaming) {
-          bigQueryWriteTransform = bigQueryWriteTransform
-              .withAutoSharding()
-              .withTriggeringFrequency(Duration.standardSeconds(10));
-        }
-        break;
-
       case STORAGE_API_AT_LEAST_ONCE:
         break;
 
       case STORAGE_WRITE_API:
-        /* Explicitly setting Storage Write API's stream number and triggering frequency
-         * is not needed if the corresponding BigQueryOption parameters are set. Here it's
-         * done for illustration purposes.
-         */
-        BigQueryOptions bigQueryOptions = options.as(BigQueryOptions.class);
-
-        // TODO: add options to test schema.
-        // TableSchema schema = getEventsSchema(options.getTestIncompatibleSchemaHandling());
-        // bigQueryWriteTransform = bigQueryWriteTransform
-        //     .withSchema(schema);
-
-        Integer numStorageWriteApiStreams = bigQueryOptions.getNumStorageWriteApiStreams();
-        if (numStorageWriteApiStreams != null && numStorageWriteApiStreams > 0) {
           bigQueryWriteTransform = bigQueryWriteTransform
-              .withNumStorageWriteApiStreams(numStorageWriteApiStreams);
-        }
-        if (streaming) {
-          bigQueryWriteTransform = bigQueryWriteTransform
-              .withTriggeringFrequency(Duration
-                  .standardSeconds(bigQueryOptions.getStorageWriteApiTriggeringFrequencySec()));
-        }
-        break;
-
-      case STREAMING_INSERTS:
-        bigQueryWriteTransform = bigQueryWriteTransform.withExtendedErrorInfo().skipInvalidRows();
-        if (streaming) {
-          bigQueryWriteTransform = bigQueryWriteTransform.withAutoSharding();
-        }
+              // .withAutoSharding()
+              .withNumStorageWriteApiStreams(2)
+              .withAutoSchemaUpdate(true);
         break;
 
       default:
@@ -154,26 +109,16 @@ public class BigQueryWritePipeline {
     WriteResult writeResult = rows.apply("Save Rows to BigQuery", bigQueryWriteTransform);
 
     switch (method) {
-      case STREAMING_INSERTS:
-        writeResult.getFailedInsertsWithErr()
-            .apply("Every 2 Minutes", Window.into(FixedWindows.of(Duration.standardMinutes(2))))
-            .apply("Process Insert Failure",
-                ParDo.of(new DoFn<BigQueryInsertError, String>() {
-                  @ProcessElement
-                  public void process(@Element BigQueryInsertError error) {
-                    LOG.error(
-                        "Failed to insert: " + error.getError() + ", row: " + error.getRow());
-                  }
-                })
-            );
-        break;
-
-      case FILE_LOADS:
-        // TODO: no reason to check anything - no errors returned?
-        break;
-
       case STORAGE_WRITE_API:
-        // TODO: check if there is a way to get errors back.
+        var failedInserts = writeResult.getFailedStorageApiInserts();
+        failedInserts.apply("Process errors", ParDo.of(
+            new DoFn<BigQueryStorageApiInsertError, Void>() {
+              @ProcessElement
+              public void process(@Element BigQueryStorageApiInsertError error) {
+                LOG.info("Failed: " + error);
+                failedEvents.inc();
+              }
+            }));
         break;
 
       case STORAGE_API_AT_LEAST_ONCE:

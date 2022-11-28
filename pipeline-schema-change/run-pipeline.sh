@@ -35,11 +35,10 @@ else
   exit 1;
 fi
 
-if [ "$#" -eq 5 ]; then
-  NUMBER_OF_STREAMS=$4
-  TRIGGERING_FREQUENCY=$5
-  PARAMS="${PARAMS} --numStorageWriteApiStreams=${NUMBER_OF_STREAMS} --storageWriteApiTriggeringFrequencySec=${TRIGGERING_FREQUENCY}"
-  JOB_NAME="${JOB_NAME}-${NUMBER_OF_STREAMS}-${TRIGGERING_FREQUENCY}"
+if [ "$#" -eq 4 ]; then
+  TRIGGERING_FREQUENCY=$4
+  PARAMS="${PARAMS} --storageWriteApiTriggeringFrequencySec=${TRIGGERING_FREQUENCY}"
+  JOB_NAME="${JOB_NAME}-${TRIGGERING_FREQUENCY}"
 fi
 
 set -x

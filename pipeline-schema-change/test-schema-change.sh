@@ -23,17 +23,17 @@ echo "Setting up the environment..."
 source setup-env.sh
 
 echo "Starting the event generation pipeline..."
-#./start-event-generation.sh 10
+./start-event-generation.sh 10
 
 echo "Start the streaming pipeline..."
 cd pipeline-schema-change
-./run-dataflow-storage-streaming.sh 2 2
+./run-dataflow-storage-streaming.sh 2
 
 echo "Waiting for 10 minutes for the pipeline to start processing events: `date`"
 sleep 600
 
 echo "Changing the database schema"
-bq query --use_legacy_sql=false  "ALTER TABLE ${PROJECT_ID}.${DATASET}.events ADD COLUMN newly_added STRING"
+bq query --use_legacy_sql=false  "ALTER TABLE ${PROJECT_ID}.${DATASET}.events0 ADD COLUMN newly_added STRING"
 
 echo "Starting additional event generation with new field"
 ./start-event-generation-with-new-column.sh 10
@@ -42,4 +42,4 @@ echo "Waiting for 10 minutes for the new events to be processed"
 sleep 600
 
 echo "If there are records in the query below the schema change works."
-bq query --use_legacy_sql=false  "SELECT newly_added, COUNT(*) as count FROM ${PROJECT_ID}.${DATASET}.events GROUP BY newly_added"
+bq query --use_legacy_sql=false  "SELECT newly_added, COUNT(*) as count FROM ${PROJECT_ID}.${DATASET}.events0 GROUP BY newly_added"

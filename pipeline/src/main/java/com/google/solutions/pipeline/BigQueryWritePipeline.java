@@ -34,6 +34,7 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.Method;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.WriteDisposition;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryInsertError;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryOptions;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryStorageApiInsertError;
 import org.apache.beam.sdk.io.gcp.bigquery.DynamicDestinations;
 import org.apache.beam.sdk.io.gcp.bigquery.TableDestination;
 import org.apache.beam.sdk.io.gcp.bigquery.WriteResult;
@@ -47,6 +48,7 @@ import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
 import org.apache.beam.sdk.transforms.windowing.Window;
 import org.apache.beam.sdk.values.PCollection;
+import org.apache.beam.sdk.values.PDone;
 import org.apache.beam.sdk.values.ValueInSingleWindow;
 import org.joda.time.Duration;
 import org.slf4j.Logger;
@@ -207,7 +209,14 @@ public class BigQueryWritePipeline {
         break;
 
       case STORAGE_WRITE_API:
-        // TODO: check if there is a way to get errors back.
+        var failedInserts = writeResult.getFailedStorageApiInserts();
+        failedInserts.apply("Process Insert Failure", ParDo.of(
+            new DoFn<BigQueryStorageApiInsertError, String>() {
+              @ProcessElement
+              public void process(@Element BigQueryStorageApiInsertError error) {
+                LOG.error("Failed to insert: " + error.getErrorMessage() + ", row: " + error.getRow());
+              }
+            }));
         break;
 
       case STORAGE_API_AT_LEAST_ONCE:
