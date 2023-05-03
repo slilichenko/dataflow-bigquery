@@ -37,7 +37,7 @@ public class EventRecordGenerator {
         record.put("user_id", String.format("%s-%04d", userNamePrefix, recordCount));
         var now = Instant.now();
         record.put("request_ts", now.toEpochMilli() * 1000 + now.getNano() / 1000); // microseconds
-        record.put("bytes_sent", 234);
+        record.put("bytes_sent", 234.23);
         record.put("bytes_received", 567);
         record.put("dst_ip", "1.2.3.4");
         record.put("dst_port", 8080);

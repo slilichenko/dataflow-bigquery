@@ -25,7 +25,6 @@ import com.google.api.services.bigquery.model.Streamingbuffer;
 import com.google.api.services.bigquery.model.Table;
 import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.GoogleCredentials;
-
 import com.google.cloud.bigquery.storage.v1.AppendRowsResponse;
 import com.google.cloud.bigquery.storage.v1.BatchCommitWriteStreamsRequest;
 import com.google.cloud.bigquery.storage.v1.BatchCommitWriteStreamsResponse;
@@ -49,8 +48,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class WriteToBigQuery {
-
   public static final Logger log = Logger.getLogger(WriteToBigQuery.class.getName());
+
 
   private Bigquery bigquery;
 
@@ -69,7 +68,7 @@ public class WriteToBigQuery {
   }
 
   private Bigquery getBigquery() throws IOException, GeneralSecurityException {
-    if(bigquery != null) {
+    if (bigquery != null) {
       return bigquery;
     }
     GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
@@ -173,7 +172,7 @@ public class WriteToBigQuery {
       }
       if (jsonArr.length() > 0) {
         ApiFuture<AppendRowsResponse> future = writer.append(jsonArr);
-        future.get();
+        var response = future.get();
       }
     }
     return recordCount;

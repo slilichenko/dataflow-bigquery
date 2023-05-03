@@ -26,10 +26,11 @@ repositories {
 }
 
 dependencies {
-    implementation platform('com.google.cloud:libraries-bom:25.2.0')
+    implementation platform('com.google.cloud:libraries-bom:26.13.0')
 
     implementation 'com.google.cloud:google-cloud-bigquerystorage'
-    implementation 'com.google.apis:google-api-services-bigquery:v2-rev20211129-1.32.1'
+    implementation 'com.google.cloud:google-cloud-bigquery'
+//    implementation 'com.google.auth:google-auth-library-oauth2-http:1.12.1'
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.0'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.0'
