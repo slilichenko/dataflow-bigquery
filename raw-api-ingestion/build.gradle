@@ -1,0 +1,25 @@
+plugins {
+    id 'java'
+    id "application"
+}
+
+group 'com.google.bigquery.ingestion'
+version '1.0-SNAPSHOT'
+
+ext {
+    javaMainClass = "com.google.bigquery.ingestion.StorageWriteAPIIngestion"
+}
+
+application {
+    mainClassName = javaMainClass
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation platform('com.google.cloud:libraries-bom:26.13.0')
+
+    implementation 'com.google.cloud:google-cloud-bigquerystorage'
+}
