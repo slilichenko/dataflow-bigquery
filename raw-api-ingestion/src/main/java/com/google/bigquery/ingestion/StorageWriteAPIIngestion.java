@@ -156,7 +156,7 @@ public class StorageWriteAPIIngestion {
       Iterator<JSONObject> dataProvider)
       throws InterruptedException, ExecutionException, IOException, Descriptors.DescriptorValidationException {
     int recordCount = 0;
-    int batchSize = 10;
+    int batchSize = 3;
     try (JsonStreamWriter writer = JsonStreamWriter.newBuilder(writeDestination, client).build()) {
       JSONArray jsonArr = new JSONArray();
       while (dataProvider.hasNext()) {
