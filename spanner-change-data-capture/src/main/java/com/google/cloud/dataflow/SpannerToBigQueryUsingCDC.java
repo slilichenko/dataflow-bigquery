@@ -35,10 +35,26 @@ public class SpannerToBigQueryUsingCDC {
 
     String getSpannerDatabaseId();
     void setSpannerDatabaseId(String value);
+
+    String getSpannerOrdersStreamId();
+    void setSpannerOrdersStreamId(String value);
+
+    String getBigQueryOrdersTableName();
+    void setBigQueryOrdersTableName(String value);
+
+    String getBigQueryDataset();
+    void setBigQueryDataset(String value);
+
+    String getSpannerTableName();
+    void setSpannerTableName(String value);
+
+    String getBigQueryProjectId();
+    void setBigQueryProjectId(String value);
   }
 
   public static void main(String[] args) {
-    Options options = PipelineOptionsFactory.as(Options.class);
+    PipelineOptionsFactory.register(Options.class);
+    Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
     Pipeline p = Pipeline.create(options);
     run(options, p);
   }
