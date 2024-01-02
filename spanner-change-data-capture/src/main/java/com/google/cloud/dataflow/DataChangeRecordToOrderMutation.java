@@ -36,8 +36,6 @@ class DataChangeRecordToOrderMutation extends DoFn<DataChangeRecord, OrderMutati
         record.getModType() == ModType.DELETE ? MutationType.DELETE : MutationType.UPSERT,
         record.getCommitTimestamp().getSeconds() * 100000 + record.getCommitTimestamp().getNanos());
 
-    System.out.println("Record sequence: " + record.getRecordSequence());
-
     for (Mod mod : record.getMods()) {
       JSONObject keyJson = new JSONObject(mod.getKeysJson());
       JSONObject valueJson = new JSONObject(mod.getNewValuesJson());
