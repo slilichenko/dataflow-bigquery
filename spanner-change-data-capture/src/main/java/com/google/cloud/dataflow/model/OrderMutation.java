@@ -16,7 +16,7 @@
 
 package com.google.cloud.dataflow.model;
 
-import com.google.cloud.dataflow.model.OrderMutation.OrderMutationCoder;
+import com.google.cloud.dataflow.model.Order.Status;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -24,40 +24,25 @@ import java.util.List;
 import java.util.Objects;
 import org.apache.beam.sdk.coders.Coder;
 import org.apache.beam.sdk.coders.CoderException;
-import org.apache.beam.sdk.coders.CoderProvider;
-import org.apache.beam.sdk.coders.DefaultCoder;
 import org.apache.beam.sdk.coders.StringUtf8Coder;
 import org.apache.beam.sdk.coders.VarLongCoder;
 import org.apache.beam.sdk.io.gcp.bigquery.RowMutationInformation;
 import org.apache.beam.sdk.io.gcp.bigquery.RowMutationInformation.MutationType;
-import org.apache.beam.sdk.values.TypeDescriptor;
 import org.checkerframework.checker.initialization.qual.Initialized;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.UnknownKeyFor;
 
-@DefaultCoder(OrderMutationCoder.class)
 public class OrderMutation {
 
   public static class OrderMutationCoder extends Coder<OrderMutation> {
-
-    public static <OrderMutation> CoderProvider getCoderProvider() {
-      return new CoderProvider() {
-        @Override
-        public @UnknownKeyFor @NonNull @Initialized <OrderMutation> Coder<OrderMutation> coderFor(
-            @UnknownKeyFor @NonNull @Initialized TypeDescriptor<OrderMutation> typeDescriptor,
-            @UnknownKeyFor @NonNull @Initialized List<? extends @UnknownKeyFor @NonNull @Initialized Coder<@UnknownKeyFor @NonNull @Initialized ?>> componentCoders) {
-          return (Coder<OrderMutation>) new OrderMutationCoder();
-        }
-      };
-    }
-
+    private static final long serialUUID = 1L;
     @Override
     public void encode(OrderMutation value,
         @UnknownKeyFor @NonNull @Initialized OutputStream outStream)
         throws @UnknownKeyFor @NonNull @Initialized CoderException, @UnknownKeyFor @NonNull @Initialized IOException {
       Order order = value.getOrder();
       VarLongCoder.of().encode(order.getId(), outStream);
-      StringUtf8Coder.of().encode(order.getStatus(), outStream);
+      StringUtf8Coder.of().encode(order.getStatus().name(), outStream);
       StringUtf8Coder.of().encode(order.getDescription(), outStream);
 
       RowMutationInformation rowMutationInformation = value.getMutationInformation();
@@ -70,7 +55,7 @@ public class OrderMutation {
         throws @UnknownKeyFor @NonNull @Initialized CoderException, @UnknownKeyFor @NonNull @Initialized IOException {
       Order order = new Order();
       order.setId(VarLongCoder.of().decode(inStream));
-      order.setStatus(StringUtf8Coder.of().decode(inStream));
+      order.setStatus(Status.valueOf(StringUtf8Coder.of().decode(inStream)));
       order.setDescription(StringUtf8Coder.of().decode(inStream));
 
       long sequenceNumber = VarLongCoder.of().decode(inStream);
@@ -82,7 +67,7 @@ public class OrderMutation {
       result.setMutationInformation(rowMutationInformation);
       result.setOrder(order);
 
-      return  result;
+      return result;
     }
 
     @Override

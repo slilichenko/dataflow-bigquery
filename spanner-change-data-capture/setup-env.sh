@@ -20,8 +20,10 @@ set -u
 cd terraform
 terraform init && terraform apply
 
+export BQ_PROJECT_ID=$(terraform output -raw bq-project-id)
 export BQ_DATASET=$(terraform output -raw bq-dataset)
-export BQ_TABLE_ORDERS=$(terraform output -raw bq-table-orders)
+
+export SPANNER_PROJECT_ID=$(terraform output -raw spanner-project-id)
 export SPANNER_DATABASE=$(terraform output -raw spanner-database)
 export SPANNER_INSTANCE=$(terraform output -raw spanner-instance)
 export ORDERS_CHANGE_STREAM=$(terraform output -raw orders_change_stream)

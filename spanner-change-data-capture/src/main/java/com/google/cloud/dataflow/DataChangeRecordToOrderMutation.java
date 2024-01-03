@@ -17,6 +17,7 @@
 package com.google.cloud.dataflow;
 
 import com.google.cloud.dataflow.model.Order;
+import com.google.cloud.dataflow.model.Order.Status;
 import com.google.cloud.dataflow.model.OrderMutation;
 import org.apache.beam.sdk.io.gcp.bigquery.RowMutationInformation;
 import org.apache.beam.sdk.io.gcp.bigquery.RowMutationInformation.MutationType;
@@ -27,6 +28,7 @@ import org.apache.beam.sdk.transforms.DoFn;
 import org.json.JSONObject;
 
 class DataChangeRecordToOrderMutation extends DoFn<DataChangeRecord, OrderMutation> {
+  private static final long serialUUID = 1L;
 
   @ProcessElement
   public void process(@Element DataChangeRecord record,
@@ -42,8 +44,18 @@ class DataChangeRecordToOrderMutation extends DoFn<DataChangeRecord, OrderMutati
 
       Order order = new Order();
       order.setId(keyJson.getInt("order_id"));
-      order.setStatus(valueJson.getString("status"));
-      order.setDescription(valueJson.getString("description"));
+
+      switch (record.getModType()) {
+        case DELETE:
+          order.setStatus(Status.DELETED);
+          order.setDescription("Deleted order");
+          break;
+
+        default:
+          order.setStatus(Status.valueOf(valueJson.getString("status")));
+          order.setDescription(valueJson.getString("description"));
+          break;
+      }
 
       OrderMutation result = new OrderMutation();
       result.setOrder(order);

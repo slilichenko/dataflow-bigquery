@@ -26,15 +26,19 @@ import com.google.cloud.bigquery.QueryJobConfiguration;
 import com.google.cloud.bigquery.TableResult;
 import com.google.cloud.dataflow.SpannerToBigQueryUsingCDC.Options;
 import com.google.cloud.dataflow.model.Order;
+import com.google.cloud.dataflow.model.Order.Status;
 import com.google.cloud.dataflow.model.OrderMutation;
+import com.google.cloud.dataflow.model.OrderMutation.OrderMutationCoder;
 import com.google.cloud.spanner.DatabaseClient;
 import com.google.cloud.spanner.DatabaseId;
+import com.google.cloud.spanner.Key;
 import com.google.cloud.spanner.Mutation;
 import com.google.cloud.spanner.Options.RpcPriority;
 import com.google.cloud.spanner.ResultSet;
 import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.Statement;
+import com.google.cloud.spanner.TransactionRunner;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -43,7 +47,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import org.apache.beam.sdk.Pipeline;
-import org.apache.beam.sdk.coders.CannotProvideCoderException;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
@@ -53,7 +56,6 @@ import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerIO;
 import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.DataChangeRecord;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.apache.beam.sdk.schemas.NoSuchSchemaException;
 import org.apache.beam.sdk.testing.TestPipeline;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.PCollection;
@@ -74,19 +76,27 @@ public class SpannerToBigQueryUsingCDCIT {
   @Before
   public void setUp() {
     options = PipelineOptionsFactory.as(Options.class);
-    options.setSpannerDatabaseId("fulfillment");
-    options.setSpannerProjectId("event-processing-demo");
-    options.setSpannerTableName("orders");
-    options.setSpannerInstanceId("main");
-    options.setSpannerOrdersStreamId("orders_changes");
-    options.setBigQueryProjectId("event-processing-demo");
-    options.setBigQueryDataset("spanner_to_bigquery");
-    options.setBigQueryOrdersTableName("order");
+
+    options.setSpannerProjectId(envValue("SPANNER_PROJECT_ID"));
+    options.setSpannerInstanceId(envValue("SPANNER_INSTANCE"));
+    options.setSpannerDatabaseId(envValue("SPANNER_DATABASE"));
+    options.setSpannerOrdersStreamId(envValue("ORDERS_CHANGE_STREAM"));
+
+    options.setBigQueryProjectId(envValue("BQ_PROJECT_ID"));
+    options.setBigQueryDataset(envValue("BQ_DATASET"));
 
     spanner = SpannerOptions.newBuilder().build().getService();
     DatabaseId spannerDb = DatabaseId.of(options.getSpannerProjectId(),
         options.getSpannerInstanceId(), options.getSpannerDatabaseId());
     dbClient = spanner.getDatabaseClient(spannerDb);
+  }
+
+  private static String envValue(String envVariable) {
+    String result = System.getenv(envVariable);
+    if( result == null) {
+      throw new IllegalStateException("Environment variable '" + envVariable + "' is not set.");
+    }
+    return  result;
   }
 
   @After
@@ -97,8 +107,7 @@ public class SpannerToBigQueryUsingCDCIT {
   }
 
   @Test
-  public void testCDCIngestion()
-      throws CannotProvideCoderException, NoSuchSchemaException, InterruptedException {
+  public void testCDCIngestion() throws InterruptedException {
 
     long startOrderNumber = getNextOrderNumber();
     AtomicLong nextOrderNumber = new AtomicLong(startOrderNumber);
@@ -106,13 +115,28 @@ public class SpannerToBigQueryUsingCDCIT {
     String[] descriptions = new String[]{"Phone", "Tablet", "Desktop", "Monitor"};
     Map<Long, Order> newOrders = Arrays.stream(descriptions)
         .collect(Collectors.toMap(description -> nextOrderNumber.get(), description -> {
-          Order order = new Order(nextOrderNumber.getAndIncrement(), description);
+          Order order = new Order(nextOrderNumber.getAndIncrement(), Status.NEW, description);
           return order;
         }));
 
     Timestamp startTime = Timestamp.now();
+    Timestamp endTime;
 
-    Timestamp endTime = createNewOrders(newOrders);
+    createNewOrders(newOrders);
+
+    Thread.sleep(3000);
+    Long orderIdToDelete = newOrders.keySet().iterator().next();
+    Order toDelete = newOrders.remove(orderIdToDelete);
+    deleteOrder(toDelete);
+
+    Thread.sleep(2000);
+
+    Order orderToUpdate = newOrders.values().iterator().next();
+    orderToUpdate.setStatus(Status.PROCESSED);
+    orderToUpdate.setDescription(orderToUpdate.getDescription() + " - processed");
+    endTime = updateOrder(orderToUpdate);
+
+    endTime = Timestamp.ofTimeSecondsAndNanos(endTime.getSeconds() + 60, 0);
 
     Pipeline p = Pipeline.create(options);
 
@@ -137,17 +161,20 @@ public class SpannerToBigQueryUsingCDCIT {
 
     WriteResult writeResult =
         dataChangeRecords
-        .apply("To OrderMutations", ParDo.of(new DataChangeRecordToOrderMutation()))
-        .apply("Save To BigQuery", BigQueryIO
-            .<OrderMutation>write()
-            .to(ordersTableReference)
-            .withCreateDisposition(CreateDisposition.CREATE_NEVER)
-            .withWriteDisposition(WriteDisposition.WRITE_APPEND)
-            .withMethod(Write.Method.STORAGE_API_AT_LEAST_ONCE)
-            .withFormatFunction(new OrderMutationToTableRow())
-            .withRowMutationInformationFn(orderMutation -> orderMutation.getMutationInformation()));
+            .apply("To OrderMutations", ParDo.of(new DataChangeRecordToOrderMutation()))
+            .setCoder(new OrderMutationCoder())
+            .apply("Save To BigQuery", BigQueryIO
+                .<OrderMutation>write()
+                .to(ordersTableReference)
+                .withCreateDisposition(CreateDisposition.CREATE_NEVER)
+                .withWriteDisposition(WriteDisposition.WRITE_APPEND)
+                .withMethod(Write.Method.STORAGE_API_AT_LEAST_ONCE)
+                .withFormatFunction(new OrderMutationToTableRow())
+                .withRowMutationInformationFn(
+                    orderMutation -> orderMutation.getMutationInformation()));
 
-    writeResult.getFailedStorageApiInserts().apply("Validate no records failed", new BigQueryFailedInsertProcessor());
+    writeResult.getFailedStorageApiInserts()
+        .apply("Validate no records failed", new BigQueryFailedInsertProcessor());
 
     p.run();
 
@@ -177,9 +204,7 @@ public class SpannerToBigQueryUsingCDCIT {
       String status = row.get("status").getStringValue();
       String description = row.get("description").getStringValue();
 
-      Order order = new Order(orderId, description);
-      order.setStatus(status);
-      result.put(orderId, order);
+      result.put(orderId, new Order(orderId, Status.valueOf(status), description));
     });
 
     return result;
@@ -207,12 +232,37 @@ public class SpannerToBigQueryUsingCDCIT {
               .set("order_id")
               .to(order.getId())
               .set("status")
-              .to(order.getStatus())
+              .to(order.getStatus().name())
               .set("description")
               .to(order.getDescription())
               .build());
     }
 
     return dbClient.write(mutations);
+  }
+
+  private Timestamp deleteOrder(Order order) {
+    List<Mutation> mutations = new ArrayList<>();
+    mutations.add(
+        Mutation.delete(options.getSpannerTableName(), Key.of(order.getId())));
+
+    return dbClient.write(mutations);
+  }
+
+  private Timestamp updateOrder(Order order) {
+    TransactionRunner transactionRunner = dbClient
+        .readWriteTransaction();
+    transactionRunner
+        .run(transaction -> {
+          String sql =
+              "UPDATE " + options.getSpannerTableName() +
+                  " SET status = '" + order.getStatus().name() + "',"
+                  // We are not concerned about SQL injection in this demo code.
+                  + " description = '" + order.getDescription() + "'" +
+                  " WHERE order_id = " + order.getId();
+          transaction.executeUpdate(Statement.of(sql));
+          return null;
+        });
+    return transactionRunner.getCommitTimestamp();
   }
 }

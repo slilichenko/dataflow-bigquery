@@ -22,6 +22,7 @@ import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.extensions.gcp.options.GcpOptions;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerIO;
+import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 
@@ -39,12 +40,14 @@ public class SpannerToBigQueryUsingCDC {
     String getSpannerOrdersStreamId();
     void setSpannerOrdersStreamId(String value);
 
+    @Default.String("order")
     String getBigQueryOrdersTableName();
     void setBigQueryOrdersTableName(String value);
 
     String getBigQueryDataset();
     void setBigQueryDataset(String value);
 
+    @Default.String("orders")
     String getSpannerTableName();
     void setSpannerTableName(String value);
 

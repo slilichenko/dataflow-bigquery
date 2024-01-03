@@ -23,21 +23,21 @@ import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 @DefaultSchema(JavaBeanSchema.class)
 public class Order {
   public enum Status {
-    NEW, SCHEDULED, PROCESSED
+    NEW, SCHEDULED, PROCESSED, DELETED
   }
 
   private long id;
-  private String status;
+  private Status status;
   private String description;
 
 
   public Order() {
 
   }
-  public Order(long id, String description) {
+  public Order(long id, Status status, String description) {
     this.id = id;
     this.description = description;
-    this.status = "NEW";
+    this.status = status;
   }
 
   public long getId() {
@@ -48,11 +48,11 @@ public class Order {
     this.id = id;
   }
 
-  public String getStatus() {
+  public Status getStatus() {
     return status;
   }
 
-  public void setStatus(String status) {
+  public void setStatus(Status status) {
     this.status = status;
   }
 
@@ -80,5 +80,14 @@ public class Order {
   @Override
   public int hashCode() {
     return Objects.hash(id, status, description);
+  }
+
+  @Override
+  public String toString() {
+    return "Order{" +
+        "id=" + id +
+        ", status=" + status +
+        ", description='" + description + '\'' +
+        '}';
   }
 }
