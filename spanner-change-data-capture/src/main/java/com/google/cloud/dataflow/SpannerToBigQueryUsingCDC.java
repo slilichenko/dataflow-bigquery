@@ -16,15 +16,26 @@
 
 package com.google.cloud.dataflow;
 
+import com.google.api.services.bigquery.model.TableReference;
 import com.google.cloud.Timestamp;
+import com.google.cloud.dataflow.model.OrderMutation;
+import com.google.cloud.dataflow.model.OrderMutation.OrderMutationCoder;
 import com.google.cloud.spanner.Options.RpcPriority;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.extensions.gcp.options.GcpOptions;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.WriteDisposition;
+import org.apache.beam.sdk.io.gcp.bigquery.WriteResult;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerIO;
+import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.DataChangeRecord;
 import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.values.PCollection;
 
 public class SpannerToBigQueryUsingCDC {
   public interface Options extends GcpOptions {
@@ -69,22 +80,34 @@ public class SpannerToBigQueryUsingCDC {
         .withInstanceId(options.getSpannerInstanceId())
         .withDatabaseId(options.getSpannerDatabaseId());
 
-    Timestamp startTime = Timestamp.now();
-    Timestamp endTime = Timestamp.ofTimeSecondsAndNanos(
-        startTime.getSeconds() + (10 * 60),
-        startTime.getNanos()
-    );
-
-    SpannerIO
+    PCollection<DataChangeRecord> dataChangeRecords = p.apply("Read Change Stream", SpannerIO
         .readChangeStream()
         .withSpannerConfig(spannerConfig)
-        .withChangeStreamName("my-change-stream")
-        // .withMetadataInstance("my-meta-instance-id")
-        // .withMetadataDatabase("my-meta-database-id")
-        // .withMetadataTable("my-meta-table-name")
+        .withChangeStreamName(options.getSpannerOrdersStreamId())
         .withRpcPriority(RpcPriority.MEDIUM)
-        .withInclusiveStartAt(startTime)
-        .withInclusiveEndAt(endTime);
+        .withInclusiveStartAt(Timestamp.now()));
+
+    TableReference ordersTableReference = new TableReference();
+    ordersTableReference.setProjectId(options.getBigQueryProjectId());
+    ordersTableReference.setTableId(options.getBigQueryOrdersTableName());
+    ordersTableReference.setDatasetId(options.getBigQueryDataset());
+
+    WriteResult writeResult =
+        dataChangeRecords
+            .apply("To OrderMutations", ParDo.of(new DataChangeRecordToOrderMutation()))
+            .setCoder(new OrderMutationCoder())
+            .apply("Save To BigQuery", BigQueryIO
+                .<OrderMutation>write()
+                .to(ordersTableReference)
+                .withCreateDisposition(CreateDisposition.CREATE_NEVER)
+                .withWriteDisposition(WriteDisposition.WRITE_APPEND)
+                .withMethod(Write.Method.STORAGE_API_AT_LEAST_ONCE)
+                .withFormatFunction(new OrderMutationToTableRow())
+                .withRowMutationInformationFn(
+                    orderMutation -> orderMutation.getMutationInformation()));
+
+    writeResult.getFailedStorageApiInserts()
+        .apply("Validate no records failed", new BigQueryFailedInsertProcessor());
 
     p.run();
   }

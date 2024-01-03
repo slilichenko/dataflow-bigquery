@@ -87,3 +87,7 @@ defaultTasks 'clean', 'assemble'
 //    def resourcesDir = new File('build/resources/main')
 //    resourcesDir.mkdirs()
 //}
+
+application {
+    mainClassName = "com.google.cloud.dataflow.SpannerToBigQueryUsingCDC"
+}
