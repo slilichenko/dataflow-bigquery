@@ -24,7 +24,6 @@ EXPERIMENTS=enable_recommendations,use_runner_v2
 
 set -x
 ./gradlew run --args="--jobName=${JOB_NAME} \
- --project=${BQ_PROJECT_ID} \
  --region=${REGION} \
  --maxNumWorkers=2 \
  --runner=DataflowRunner \
@@ -36,4 +35,7 @@ set -x
  --bigQueryDataset=${BQ_DATASET} \
  --experiments=${EXPERIMENTS} \
  --enableStreamingEngine \
+ --serviceAccount=${DATAFLOW_SA} \
+ --project='${DATAFLOW_PROJECT_ID}' \
+ --tempLocation=${DATAFLOW_TEMP_BUCKET}/temp \
  --diskSizeGb=30"

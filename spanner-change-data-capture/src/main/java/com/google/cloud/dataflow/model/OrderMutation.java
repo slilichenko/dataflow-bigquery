@@ -35,7 +35,7 @@ import org.checkerframework.checker.nullness.qual.UnknownKeyFor;
 public class OrderMutation {
 
   public static class OrderMutationCoder extends Coder<OrderMutation> {
-    private static final long serialUUID = 1L;
+    private static final long serialVersionUID = 1L;
     @Override
     public void encode(OrderMutation value,
         @UnknownKeyFor @NonNull @Initialized OutputStream outStream)
@@ -117,5 +117,13 @@ public class OrderMutation {
   @Override
   public int hashCode() {
     return Objects.hash(mutationInformation, order);
+  }
+
+  @Override
+  public String toString() {
+    return "OrderMutation{" +
+        "mutationInformation=" + mutationInformation +
+        ", order=" + order +
+        '}';
   }
 }

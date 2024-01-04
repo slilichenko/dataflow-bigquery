@@ -33,3 +33,9 @@ resource "google_bigquery_table" "orders" {
 ]
 EOF
 }
+
+resource "google_bigquery_dataset_iam_member" "bigquery_editor_dataflow_sa" {
+  dataset_id = google_bigquery_dataset.spanner_bigquery.dataset_id
+  member     = local.dataflow_sa_principal
+  role       = "roles/bigquery.dataEditor"
+}

@@ -17,11 +17,9 @@
 package com.google.cloud.dataflow.model;
 
 import java.util.Objects;
-import org.apache.beam.sdk.schemas.JavaBeanSchema;
-import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 
-@DefaultSchema(JavaBeanSchema.class)
 public class Order {
+
   public enum Status {
     NEW, SCHEDULED, PROCESSED, DELETED
   }
@@ -34,6 +32,7 @@ public class Order {
   public Order() {
 
   }
+
   public Order(long id, Status status, String description) {
     this.id = id;
     this.description = description;

@@ -20,3 +20,9 @@ output "spanner-database" {
 output "spanner-instance" {
   value = google_spanner_instance.main.name
 }
+output "dataflow-sa" {
+  value = google_service_account.dataflow-sa.email
+}
+output "dataflow-project-id" {
+  value = var.project_id
+}

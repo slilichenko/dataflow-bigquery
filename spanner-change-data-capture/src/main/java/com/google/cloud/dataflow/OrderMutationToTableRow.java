@@ -23,7 +23,7 @@ import org.apache.beam.sdk.transforms.SerializableFunction;
 
 class OrderMutationToTableRow implements SerializableFunction<OrderMutation, TableRow> {
 
-  private static final long serialUUID = 1L;
+  private static final long serialVersionUID = 1L;
 
   @Override
   public TableRow apply(OrderMutation input) {

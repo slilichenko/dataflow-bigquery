@@ -29,6 +29,8 @@ export SPANNER_INSTANCE=$(terraform output -raw spanner-instance)
 export ORDERS_CHANGE_STREAM=$(terraform output -raw orders_change_stream)
 
 export DATAFLOW_TEMP_BUCKET=gs://$(terraform output -raw dataflow-temp-bucket)
+export DATAFLOW_SA=$(terraform output -raw dataflow-sa)
+export DATAFLOW_PROJECT_ID=$(terraform output -raw dataflow-project-id)
 export REGION=$(terraform output -raw region)
 
 cd ..

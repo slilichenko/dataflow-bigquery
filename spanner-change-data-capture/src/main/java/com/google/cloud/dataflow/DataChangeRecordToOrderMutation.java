@@ -26,9 +26,12 @@ import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.Mod;
 import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.ModType;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class DataChangeRecordToOrderMutation extends DoFn<DataChangeRecord, OrderMutation> {
-  private static final long serialUUID = 1L;
+  private static final Logger LOG = LoggerFactory.getLogger(DataChangeRecordToOrderMutation.class);
+  private static final long serialVersionUID = 1L;
 
   @ProcessElement
   public void process(@Element DataChangeRecord record,
@@ -36,7 +39,7 @@ class DataChangeRecordToOrderMutation extends DoFn<DataChangeRecord, OrderMutati
 
     RowMutationInformation mutationInformation = RowMutationInformation.of(
         record.getModType() == ModType.DELETE ? MutationType.DELETE : MutationType.UPSERT,
-        record.getCommitTimestamp().getSeconds() * 100000 + record.getCommitTimestamp().getNanos());
+        record.getCommitTimestamp().getSeconds() * 1_000_000_000 + record.getCommitTimestamp().getNanos());
 
     for (Mod mod : record.getMods()) {
       JSONObject keyJson = new JSONObject(mod.getKeysJson());
@@ -60,6 +63,10 @@ class DataChangeRecordToOrderMutation extends DoFn<DataChangeRecord, OrderMutati
       OrderMutation result = new OrderMutation();
       result.setOrder(order);
       result.setMutationInformation(mutationInformation);
+
+      // This log output is for demo purposes only. Don't use it in production pipelines.
+      LOG.info("Mutation: " + result);
+
       outputReceiver.output(result);
     }
   }

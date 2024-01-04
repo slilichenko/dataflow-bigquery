@@ -1,5 +1,5 @@
 resource "google_spanner_instance" "main" {
-  config       = "regional-${var.region}"
+  config       = "regional-${var.spanner_location}"
   name         = "main"
   display_name = "main-instance"
   num_nodes    = 1
@@ -18,4 +18,11 @@ resource "google_spanner_database" "fulfillment" {
     "CREATE CHANGE STREAM ${local.orders_change_stream} FOR orders OPTIONS ( value_capture_type = 'NEW_ROW' )"
   ]
   deletion_protection = false
+}
+
+resource "google_spanner_database_iam_member" "dataflow_sa_editor" {
+  database = google_spanner_database.fulfillment.name
+  instance = google_spanner_instance.main.name
+  member   = local.dataflow_sa_principal
+  role     = "roles/spanner.databaseUser"
 }
