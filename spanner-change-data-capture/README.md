@@ -7,7 +7,7 @@ Change Streams are used as the source of the data.
 We are using a single table replication as an example. The source and
 destination table, orders, has three columns - id, status and description.
 
-# Environment setup
+# Setup
 
 Environment for this demo is set up using Terraform. You would need to
 authenticate to the Terraform using credentials with sufficient privileges to
@@ -59,7 +59,7 @@ printed to the console by this script.
 Once the pipeline is started and running, go to
 the [Spanner console](https://console.cloud.google.com/spanner/instances/main/databases/fulfillment/details/query).
 
-Create and modify several orders using this SQL as an example:
+Create and modify several orders using these SQL statements as example:
 
 ## Creating new orders
 
