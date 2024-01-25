@@ -39,6 +39,7 @@ import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.PCollection;
+import org.joda.time.Duration;
 import org.joda.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,6 +86,16 @@ public class SpannerToBigQueryUsingCDC {
     String getBigQueryProjectId();
 
     void setBigQueryProjectId(String value);
+
+    @Default.Integer(0)
+    int getSyncPointDetectionLatenessInSeconds();
+
+    void setSyncPointDetectionLatenessInSeconds(int value);
+
+    @Default.Integer(5)
+    int getSyncPointDetectionFrequencyInSeconds();
+
+    void setSyncPointDetectionFrequencyInSeconds(int value);
   }
 
   public static void main(String[] args) {
@@ -131,7 +142,10 @@ public class SpannerToBigQueryUsingCDC {
     writeResult.getFailedStorageApiInserts()
         .apply("Validate no orders failed", new BigQueryFailedInsertProcessor());
 
-    PCollection<Instant> bigQuerySyncPoints = BigQueryIOSyncPointGenerator.generate(writeResult);
+    PCollection<Instant> bigQuerySyncPoints = BigQueryIOSyncPointGenerator.generate(
+        writeResult,
+        Duration.standardSeconds(options.getSyncPointDetectionFrequencyInSeconds()),
+        Duration.standardSeconds(options.getSyncPointDetectionLatenessInSeconds()));
     bigQuerySyncPoints.apply("Log SyncPoints", ParDo.of(new LogSyncPoints()));
 
     TableReference syncPointTableReference = new TableReference();
@@ -165,6 +179,7 @@ public class SpannerToBigQueryUsingCDC {
   }
 
   public static class LogSyncPoints extends DoFn<Instant, Void> {
+
     private static final long serialVersionUID = 1;
     private static final Logger LOG = LoggerFactory.getLogger(LogSyncPoints.class);
 

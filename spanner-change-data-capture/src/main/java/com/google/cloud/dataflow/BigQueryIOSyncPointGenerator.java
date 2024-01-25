@@ -37,24 +37,35 @@ import org.joda.time.Instant;
 
 public class BigQueryIOSyncPointGenerator {
 
-  public static PCollection<Instant> generate(WriteResult bigQueryWriteResult) {
+  public static PCollection<Instant> generate(WriteResult bigQueryWriteResult, Duration frequency,
+      Duration maxLatency) {
     PCollection<TableRow> successfulWrites = bigQueryWriteResult.getSuccessfulStorageApiInserts();
     PCollection<BigQueryStorageApiInsertError> failedWrites = bigQueryWriteResult.getFailedStorageApiInserts();
 
     PCollectionList<Instant> pCollectionList = PCollectionList.of(
         successfulWrites.apply("Successful to Timestamp", ParDo.of(new ExtractTimestamp()))).and(
         failedWrites.apply("Failed to Timestamp", ParDo.of(new ExtractTimestamp())));
-    return pCollectionList.apply("Sync Points", new BigQueryIOSyncPointTransform());
+    return pCollectionList.apply("Sync Points", new BigQueryIOSyncPointTransform(frequency,
+        maxLatency));
   }
 
   static class BigQueryIOSyncPointTransform extends
       PTransform<PCollectionList<Instant>, PCollection<Instant>> {
+
     private static final long serialVersionUID = 1;
+    private final Duration frequency;
+    private final Duration maxLatency;
+
+    BigQueryIOSyncPointTransform(Duration frequency, Duration maxLatency) {
+      this.frequency = frequency;
+      this.maxLatency = maxLatency;
+    }
 
     @Override
     public PCollection<Instant> expand(PCollectionList<Instant> input) {
       return input.apply(Flatten.pCollections())
-          .apply("Into FixedWindow", Window.into(FixedWindows.of(Duration.standardSeconds(15))))
+          .apply("Into FixedWindow",
+              Window.<Instant>into(FixedWindows.of(frequency)).withAllowedLateness(maxLatency))
           .apply("Combine", Sample.any(1))
           .apply("Get Window End", ParDo.of(new ExtractWindowEnd()))
           .apply("Into GlobalWindow", Window.<Instant>into(
@@ -65,7 +76,9 @@ public class BigQueryIOSyncPointGenerator {
   }
 
   static class ExtractWindowEnd extends DoFn<Instant, Instant> {
+
     private static final long serialVersionUID = 1;
+
     @ProcessElement
     public void process(BoundedWindow window, OutputReceiver<Instant> outputReceiver) {
       outputReceiver.output(window.maxTimestamp());
@@ -73,7 +86,9 @@ public class BigQueryIOSyncPointGenerator {
   }
 
   static class ExtractTimestamp extends DoFn<Object, Instant> {
+
     private static final long serialVersionUID = 1;
+
     @ProcessElement
     public void process(@Timestamp Instant timestamp, OutputReceiver<Instant> outputReceiver) {
       outputReceiver.output(timestamp);
