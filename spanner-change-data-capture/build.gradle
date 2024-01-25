@@ -16,7 +16,7 @@
 
 buildscript {
     ext {
-        dataflowBeamVersion = '2.52.0'
+        dataflowBeamVersion = '2.53.0'
     }
     repositories {
         mavenCentral()

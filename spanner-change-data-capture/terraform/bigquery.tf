@@ -34,6 +34,30 @@ resource "google_bigquery_table" "orders" {
 EOF
 }
 
+resource "google_bigquery_table" "sync_point" {
+  deletion_protection = false
+  dataset_id          = google_bigquery_dataset.spanner_bigquery.dataset_id
+  table_id            = "sync_point"
+  description         = "Last known completed read from Spanner"
+  clustering          = ["table_name"]
+  table_constraints {
+    primary_key { columns = ["table_name"] }
+  }
+  schema = <<EOF
+[
+  {
+    "mode": "REQUIRED",
+    "name": "table_name",
+    "type": "STRING"
+  },
+  {
+    "mode": "REQUIRED",
+    "name": "sync_point",
+    "type": "TIMESTAMP"
+  }
+]
+EOF
+}
 resource "google_bigquery_dataset_iam_member" "bigquery_editor_dataflow_sa" {
   dataset_id = google_bigquery_dataset.spanner_bigquery.dataset_id
   member     = local.dataflow_sa_principal
