@@ -112,12 +112,13 @@ public class SpannerToBigQueryUsingCDC {
         .withInstanceId(options.getSpannerInstanceId())
         .withDatabaseId(options.getSpannerDatabaseId());
 
+    Timestamp readFrom = Timestamp.now();
     PCollection<DataChangeRecord> dataChangeRecords = p.apply("Read Change Stream", SpannerIO
         .readChangeStream()
         .withSpannerConfig(spannerConfig)
         .withChangeStreamName(options.getSpannerOrdersStreamId())
         .withRpcPriority(RpcPriority.MEDIUM)
-        .withInclusiveStartAt(Timestamp.now()));
+        .withInclusiveStartAt(readFrom));
 
     TableReference ordersTableReference = new TableReference();
     ordersTableReference.setProjectId(options.getBigQueryProjectId());
@@ -145,7 +146,8 @@ public class SpannerToBigQueryUsingCDC {
     PCollection<Instant> bigQuerySyncPoints = BigQueryIOSyncPointGenerator.generate(
         writeResult,
         Duration.standardSeconds(options.getSyncPointDetectionFrequencyInSeconds()),
-        Duration.standardSeconds(options.getSyncPointDetectionLatenessInSeconds()));
+        Duration.standardSeconds(options.getSyncPointDetectionLatenessInSeconds()),
+        Instant.ofEpochSecond(readFrom.getSeconds()));
     bigQuerySyncPoints.apply("Log SyncPoints", ParDo.of(new LogSyncPoints()));
 
     TableReference syncPointTableReference = new TableReference();

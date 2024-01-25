@@ -23,6 +23,7 @@ import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.Flatten;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.transforms.PeriodicImpulse;
 import org.apache.beam.sdk.transforms.Sample;
 import org.apache.beam.sdk.transforms.windowing.AfterProcessingTime;
 import org.apache.beam.sdk.transforms.windowing.BoundedWindow;
@@ -31,39 +32,55 @@ import org.apache.beam.sdk.transforms.windowing.GlobalWindows;
 import org.apache.beam.sdk.transforms.windowing.Repeatedly;
 import org.apache.beam.sdk.transforms.windowing.Window;
 import org.apache.beam.sdk.values.PCollection;
+import org.apache.beam.sdk.values.PCollection.IsBounded;
 import org.apache.beam.sdk.values.PCollectionList;
 import org.joda.time.Duration;
 import org.joda.time.Instant;
 
 public class BigQueryIOSyncPointGenerator {
 
-  public static PCollection<Instant> generate(WriteResult bigQueryWriteResult, Duration frequency,
-      Duration maxLatency) {
+  public static PCollection<Instant> generate(
+      WriteResult bigQueryWriteResult,
+      Duration frequency,
+      Duration maxLatency, Instant heartbeatStartTime) {
     PCollection<TableRow> successfulWrites = bigQueryWriteResult.getSuccessfulStorageApiInserts();
     PCollection<BigQueryStorageApiInsertError> failedWrites = bigQueryWriteResult.getFailedStorageApiInserts();
 
     PCollectionList<Instant> pCollectionList = PCollectionList.of(
         successfulWrites.apply("Successful to Timestamp", ParDo.of(new ExtractTimestamp()))).and(
         failedWrites.apply("Failed to Timestamp", ParDo.of(new ExtractTimestamp())));
-    return pCollectionList.apply("Sync Points", new BigQueryIOSyncPointTransform(frequency,
-        maxLatency));
+    return pCollectionList.apply("Sync Points",
+        new BigQueryIOSyncPointTransform(heartbeatStartTime, frequency,
+            maxLatency));
   }
 
   static class BigQueryIOSyncPointTransform extends
       PTransform<PCollectionList<Instant>, PCollection<Instant>> {
 
     private static final long serialVersionUID = 1;
+
+    private final Instant heartbeatStartTime;
     private final Duration frequency;
     private final Duration maxLatency;
 
-    BigQueryIOSyncPointTransform(Duration frequency, Duration maxLatency) {
+    BigQueryIOSyncPointTransform(Instant heartbeatStartTime, Duration frequency,
+        Duration maxLatency) {
+      this.heartbeatStartTime = heartbeatStartTime;
       this.frequency = frequency;
       this.maxLatency = maxLatency;
     }
 
     @Override
     public PCollection<Instant> expand(PCollectionList<Instant> input) {
-      return input.apply(Flatten.pCollections())
+      PCollectionList<Instant> timestampPCollections = input;
+      if (input.get(0).isBounded() == IsBounded.UNBOUNDED) {
+        PCollection<Instant> heartBeats = input.getPipeline()
+            .apply("Sync Detection Heartbeat", PeriodicImpulse
+                .create().withInterval(frequency).startAt(heartbeatStartTime));
+        timestampPCollections = timestampPCollections.and(heartBeats);
+      }
+
+      return timestampPCollections.apply(Flatten.pCollections())
           .apply("Into FixedWindow",
               Window.<Instant>into(FixedWindows.of(frequency)).withAllowedLateness(maxLatency))
           .apply("Combine", Sample.any(1))
