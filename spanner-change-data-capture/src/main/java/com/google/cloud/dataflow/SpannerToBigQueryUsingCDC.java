@@ -163,16 +163,15 @@ public class SpannerToBigQueryUsingCDC {
                 .withCreateDisposition(CreateDisposition.CREATE_NEVER)
                 .withWriteDisposition(WriteDisposition.WRITE_APPEND)
                 .withMethod(Write.Method.STORAGE_API_AT_LEAST_ONCE)
-                .withFormatFunction(instant -> {
+                .withFormatFunction(syncPoint -> {
                   TableRow result = new TableRow();
                   result.set("table_name", "order");
-                  result.set("sync_point", instant);
+                  result.set("sync_point", syncPoint);
                   return result;
                 })
                 .withRowMutationInformationFn(
-                    syncPoint -> {
-                      return RowMutationInformation.of(MutationType.UPSERT, syncPoint.getMillis());
-                    }));
+                    syncPoint -> RowMutationInformation.of(MutationType.UPSERT,
+                        syncPoint.getMillis())));
 
     syncPointWriteResult.getFailedStorageApiInserts()
         .apply("Validate no sync points failed", new BigQueryFailedInsertProcessor());
